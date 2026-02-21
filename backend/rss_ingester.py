@@ -31,6 +31,19 @@ class RSSIngester:
         self.output_file = output_file
         self.articles = []
         self.seen_hashes = set()
+        self.existing_articles = []
+        
+        # Load existing articles to avoid re-scraping
+        try:
+            with open(self.output_file, 'r', encoding='utf-8') as f:
+                self.existing_articles = json.load(f)
+                # Populate seen_hashes with existing articles
+                for article in self.existing_articles:
+                    article_hash = self.get_content_hash(article['title'], article['url'])
+                    self.seen_hashes.add(article_hash)
+                print(f"📚 Loaded {len(self.existing_articles)} existing articles")
+        except FileNotFoundError:
+            print("📝 No existing articles found, starting fresh")
     
     def clean_html(self, html_content: str) -> str:
         """Remove HTML tags and clean text"""
@@ -132,7 +145,7 @@ class RSSIngester:
     def fetch_all(self, max_feeds: int = None, scrape_full: bool = True, days_back: int = 4) -> List[Dict]:
         """Fetch from all RSS feeds"""
         self.articles = []
-        self.seen_hashes = set()
+        # Keep seen_hashes to avoid re-scraping existing articles
         
         feeds = list(RSS_FEEDS.items())
         if max_feeds:
@@ -151,12 +164,20 @@ class RSSIngester:
         return self.articles
     
     def save(self):
-        """Save articles to JSON file"""
+        """Save articles to JSON file, merging with existing ones"""
+        # Merge new articles with existing ones
+        all_articles = self.existing_articles + self.articles
+        
+        # Re-assign IDs to all articles
+        for idx, article in enumerate(all_articles, 1):
+            article['id'] = idx
+        
         with open(self.output_file, 'w', encoding='utf-8') as f:
-            json.dump(self.articles, f, ensure_ascii=False, indent=2)
+            json.dump(all_articles, f, ensure_ascii=False, indent=2)
         
         scraped_count = sum(1 for art in self.articles if art.get('scraped', False))
-        print(f"\n💾 Saved {len(self.articles)} articles ({scraped_count} fully scraped) to {self.output_file}")
+        print(f"\n💾 Added {len(self.articles)} new articles ({scraped_count} fully scraped)")
+        print(f"   Total in database: {len(all_articles)} articles")
     
     def get_stats(self) -> Dict:
         """Get ingestion statistics"""
@@ -164,19 +185,23 @@ class RSSIngester:
         scraped_count = 0
         total_content_length = 0
         
-        for article in self.articles:
+        # Get total articles (existing + new)
+        all_articles = self.existing_articles + self.articles
+        
+        for article in all_articles:
             source = article['source']
             sources[source] = sources.get(source, 0) + 1
             if article.get('scraped', False):
                 scraped_count += 1
             total_content_length += article.get('content_length', len(article.get('content', '')))
         
-        avg_length = total_content_length // len(self.articles) if self.articles else 0
+        avg_length = total_content_length // len(all_articles) if all_articles else 0
         
         return {
-            "total_articles": len(self.articles),
+            "total_articles": len(all_articles),
+            "new_articles": len(self.articles),
             "fully_scraped": scraped_count,
-            "sources": len(sources),
+            "sources_used": len(sources),
             "by_source": sources,
             "avg_content_length": avg_length,
             "latest_update": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -196,9 +221,10 @@ if __name__ == "__main__":
     stats = ingest_news(scrape_full=True, days_back=4)
     print("\n" + "="*50)
     print("📊 Ingestion Statistics:")
-    print(f"  Total articles: {stats['total_articles']}")
+    print(f"  New articles added: {stats['new_articles']}")
+    print(f"  Total articles in DB: {stats['total_articles']}")
     print(f"  Fully scraped: {stats['fully_scraped']}")
-    print(f"  Sources: {stats['sources']}")
+    print(f"  Sources: {stats['sources_used']}")
     print(f"  Avg content length: {stats['avg_content_length']} chars")
     print(f"  Last update: {stats['latest_update']}")
     print("="*50)

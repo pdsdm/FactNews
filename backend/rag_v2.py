@@ -12,44 +12,99 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class ChunkRAG:
-    def __init__(self, articles: List[Dict]):
+    def __init__(self, articles: List[Dict], embeddings_file: str = "chunk_embeddings.json"):
         """Initialize with articles and create chunks"""
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chunker = ArticleChunker(chunk_size=500, overlap=100)
+        self.embeddings_file = embeddings_file
         
         # Chunk all articles
         print("📦 Chunking articles...")
         self.chunks = self.chunker.chunk_all_articles(articles)
         print(f"✅ Created {len(self.chunks)} chunks from {len(articles)} articles")
         
-        # Create embeddings for all chunks
-        self.chunk_embeddings = []
-        self._create_chunk_embeddings()
+        # Load existing embeddings or create new ones
+        self.embeddings_db = {}  # {chunk_id: embedding_vector}
+        self.chunk_embeddings = []  # Ordered list matching self.chunks
+        self._load_or_create_embeddings()
     
-    def _create_chunk_embeddings(self):
-        """Create embeddings for all chunks"""
+    def _load_or_create_embeddings(self):
+        """Load existing embeddings and create only for new chunks"""
         if not self.client.api_key:
             print("⚠️  No OpenAI key, skipping embeddings")
             return
         
-        print("🔄 Creating chunk embeddings...")
-        texts = [chunk['text'] for chunk in self.chunks]
+        # Load existing embeddings from file
+        if os.path.exists(self.embeddings_file):
+            with open(self.embeddings_file, 'r') as f:
+                self.embeddings_db = json.load(f)
+            print(f"📚 Loaded {len(self.embeddings_db)} existing embeddings")
+        else:
+            print("📝 No existing embeddings found")
+        
+        # Identify new chunks that need embeddings
+        new_chunks = []
+        new_chunk_indices = []
+        
+        for i, chunk in enumerate(self.chunks):
+            chunk_id = chunk['chunk_id']
+            if chunk_id not in self.embeddings_db:
+                new_chunks.append(chunk)
+                new_chunk_indices.append(i)
+        
+        # Generate embeddings only for new chunks
+        if new_chunks:
+            print(f"🔄 Creating embeddings for {len(new_chunks)} new chunks...")
+            self._generate_embeddings_batch(new_chunks)
+            
+            # Save updated embeddings to file
+            with open(self.embeddings_file, 'w') as f:
+                json.dump(self.embeddings_db, f)
+            print(f"💾 Saved embeddings to {self.embeddings_file}")
+        else:
+            print("✅ All chunks already have embeddings")
+        
+        # Build ordered embedding list matching self.chunks
+        self.chunk_embeddings = [
+            self.embeddings_db.get(chunk['chunk_id'], [0.0] * 1536)
+            for chunk in self.chunks
+        ]
+        print(f"✅ Ready with {len(self.chunk_embeddings)} chunk embeddings")
+    
+    def _generate_embeddings_batch(self, chunks: List[Dict]):
+        """Generate embeddings for a batch of chunks and store in DB"""
+        texts = [chunk['text'] for chunk in chunks]
         
         # Batch process (OpenAI allows up to 2048 inputs)
         batch_size = 100
-        all_embeddings = []
         
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i+batch_size]
+            batch_texts = texts[i:i+batch_size]
+            batch_chunks = chunks[i:i+batch_size]
+            
             response = self.client.embeddings.create(
                 model="text-embedding-3-small",
-                input=batch
+                input=batch_texts
             )
-            batch_embeddings = [item.embedding for item in response.data]
-            all_embeddings.extend(batch_embeddings)
+            
+            # Store embeddings with chunk_id as key
+            for j, embedding_data in enumerate(response.data):
+                chunk_id = batch_chunks[j]['chunk_id']
+                self.embeddings_db[chunk_id] = embedding_data.embedding
+    
+    def cleanup_old_embeddings(self):
+        """Remove embeddings for chunks that no longer exist"""
+        current_chunk_ids = {chunk['chunk_id'] for chunk in self.chunks}
+        old_chunk_ids = set(self.embeddings_db.keys()) - current_chunk_ids
         
-        self.chunk_embeddings = all_embeddings
-        print(f"✅ Created {len(all_embeddings)} chunk embeddings")
+        if old_chunk_ids:
+            print(f"🧹 Removing {len(old_chunk_ids)} obsolete embeddings")
+            for chunk_id in old_chunk_ids:
+                del self.embeddings_db[chunk_id]
+            
+            # Save cleaned database
+            with open(self.embeddings_file, 'w') as f:
+                json.dump(self.embeddings_db, f)
     
     def search_chunks(self, query: str, top_k: int = 20) -> List[Dict]:
         """

@@ -50,6 +50,11 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 
+# RAG Data - Generated files
+backend/news.json
+backend/chunk_embeddings.json
+backend/chunk_embeddings.npz
+
 # Chroma
 chroma/
 

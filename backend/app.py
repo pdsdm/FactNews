@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from rag_v2 import ChunkRAG
+from rag_optimized import OptimizedChunkRAG
 from rss_ingester import ingest_news
 import os
 import json
@@ -17,12 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load articles and initialize chunk-level RAG
+# Load articles and initialize optimized chunk-level RAG
 with open("news.json", 'r', encoding='utf-8') as f:
     articles = json.load(f)
 
-print("🚀 Initializing Chunk-level RAG...")
-chunk_rag = ChunkRAG(articles)
+print("🚀 Initializing Optimized Chunk-level RAG...")
+chunk_rag = OptimizedChunkRAG(articles)
 
 class QuestionRequest(BaseModel):
     question: str
@@ -65,11 +65,10 @@ def get_stats():
     """Get system statistics"""
     stats = chunk_rag.get_stats()
     return {
-        "articles_indexed": stats['total_articles'],
-        "chunks_created": stats['total_chunks'],
-        "sources": stats['total_sources'],
-        "embeddings_ready": stats['embeddings_ready'],
-        "avg_chunks_per_article": stats['avg_chunks_per_article']
+        "articles_indexed": stats.get('articles_indexed', 0),
+        "chunks_created": stats.get('chunks_created', 0),
+        "sources": stats.get('sources', 0),
+        "embeddings_ready": stats.get('embeddings_ready', False)
     }
 
 @app.post("/refresh-news")
@@ -85,8 +84,11 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
         with open("news.json", 'r', encoding='utf-8') as f:
             articles = json.load(f)
         
-        print("🔄 Re-initializing Chunk RAG with new articles...")
-        chunk_rag = ChunkRAG(articles)
+        print("🔄 Re-initializing Optimized Chunk RAG with new articles...")
+        chunk_rag = OptimizedChunkRAG(articles)
+        
+        # Cleanup embeddings for deleted articles/chunks
+        chunk_rag.cleanup_old_embeddings()
         
         return {
             "success": True,

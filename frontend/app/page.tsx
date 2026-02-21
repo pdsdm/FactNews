@@ -13,7 +13,7 @@ import {
   Shield,
 } from "lucide-react";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://100.98.98.88:8000";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface Fact {
   claim: string;
@@ -46,11 +46,18 @@ interface Response {
   sources_analyzed?: number;
 }
 
+interface Stats {
+  articles_indexed: number;
+  chunks_created: number;
+  sources: number;
+  embeddings_ready: boolean;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<Response | null>(null);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,7 +85,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
       alert(
-        `News updated!\n${data.total_articles} articles from ${data.sources} sources`,
+        `News updated!\n✅ ${data.new_articles} new articles added\n📚 Total: ${data.total_articles} articles from ${data.sources_used} sources`,
       );
       await fetchStats();
     } catch (err) {
