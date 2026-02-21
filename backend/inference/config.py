@@ -47,6 +47,12 @@ PROVIDERS: dict[str, dict] = {
         "model": "grok-3-mini-fast",
         "supports_embeddings": False,
     },
+    "cerebras": {
+        "base_url": "https://api.cerebras.ai/v1",
+        "env_key": "CEREBRAS_API_KEY",
+        "model": "llama3.1-8b",
+        "supports_embeddings": False,
+    },
     "zai": {
         "base_url": "https://api.zai.com/v1",   # placeholder - update when available
         "env_key": "ZAI_API_KEY",

@@ -15,6 +15,7 @@ from inference.providers import (
     GoogleProvider,
     AnthropicProvider,
     GrokProvider,
+    CerebrasProvider,
     ZAIProvider,
 )
 
@@ -25,6 +26,7 @@ _REGISTRY: dict[str, type[InferenceProvider]] = {
     "google": GoogleProvider,
     "anthropic": AnthropicProvider,
     "grok": GrokProvider,
+    "cerebras": CerebrasProvider,
     "zai": ZAIProvider,
 }
 
