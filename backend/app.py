@@ -117,10 +117,21 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
             raise HTTPException(status_code=404, detail="No relevant content found")
         
         # 2. Ensure diversity: chunks from different sources/articles
-        print(f"📊 Selecting diverse chunks...")
-        diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=10)
+        print(f"📊 Selecting diverse chunks from {len(set(c['source'] for c in relevant_chunks))} sources...")
+        diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
         
-        print(f"✅ Selected {len(diverse_chunks)} chunks from {len(set(c['source'] for c in diverse_chunks))} sources")
+        # Verify we have good source diversity
+        sources_used = {}
+        for chunk in diverse_chunks:
+            source = chunk['source']
+            sources_used[source] = sources_used.get(source, 0) + 1
+        
+        print(f"✅ Selected {len(diverse_chunks)} chunks: {dict(sources_used)}")
+        
+        # If we don't have at least 3 different sources, get more chunks
+        if len(sources_used) < 3 and len(relevant_chunks) > len(diverse_chunks):
+            print("⚠️  Low diversity, searching more chunks...")
+            diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=20)
         
         # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
         print(f"🤖 Generating consensus article...")

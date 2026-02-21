@@ -84,77 +84,229 @@ class ChunkRAG:
     
     def get_diverse_chunks(self, chunks: List[Dict], max_chunks: int = 10) -> List[Dict]:
         """
-        Select diverse chunks from different sources.
-        Ensures we don't get 10 chunks from the same article.
+        Select diverse chunks from different sources using strict round-robin.
+        GUARANTEES maximum source diversity.
         """
-        seen_sources = set()
-        seen_articles = set()
-        diverse_chunks = []
+        if not chunks:
+            return []
         
+        # Group chunks by source
+        by_source = {}
         for chunk in chunks:
-            article_key = (chunk['source'], chunk['title'])
-            
-            # Prefer chunks from new sources/articles
-            if article_key not in seen_articles or len(diverse_chunks) < max_chunks:
-                diverse_chunks.append(chunk)
-                seen_sources.add(chunk['source'])
-                seen_articles.add(article_key)
-            
-            if len(diverse_chunks) >= max_chunks:
-                break
+            source = chunk['source']
+            if source not in by_source:
+                by_source[source] = []
+            by_source[source].append(chunk)
         
-        return diverse_chunks
+        # Strict round-robin: cycle through sources evenly
+        diverse_chunks = []
+        round_num = 0
+        
+        while len(diverse_chunks) < max_chunks:
+            added_this_round = False
+            
+            # Go through each source in order
+            for source in sorted(by_source.keys()):
+                if len(diverse_chunks) >= max_chunks:
+                    break
+                
+                # Take the next chunk from this source (if available)
+                if round_num < len(by_source[source]):
+                    diverse_chunks.append(by_source[source][round_num])
+                    added_this_round = True
+            
+            # If no source had chunks for this round, we're done
+            if not added_this_round:
+                break
+            
+            round_num += 1
+        
+        return diverse_chunks[:max_chunks]
     
     def generate_answer(self, query: str, chunks: List[Dict]) -> Dict:
         """
         Generate consensus answer from relevant chunks (not full articles).
         Much faster because we send way less text.
         """
-        system_prompt = """You are an investigative journalist specializing in fact-checking.
+        # Build system prompt with chunk count
+        system_prompt = """You are a STRICT fact extractor. You can ONLY use information from the chunks provided below.
 
-YOUR MISSION:
-- Generate a FACT-BASED article from CHUNKS of different news articles
-- Each chunk comes from a different news source
-- CRITICALLY IMPORTANT: Cross-reference chunks to find consensus
-- Every fact MUST cite ALL sources that mention it (not just one)
-- Identify CONSENSUS (what 2+ sources confirm) vs DIVERGENCES (only 1 source)
-- Detect BIASES by comparing how different outlets report the same fact
+ABSOLUTE CONSTRAINTS:
+1. You have EXACTLY {num_chunks} text chunks below - NO OTHER INFORMATION EXISTS
+2. ONLY extract facts that are EXPLICITLY AND LITERALLY stated in these chunks
+3. NEVER add context, background, or general knowledge
+4. NEVER infer or assume anything beyond the exact text
+5. If the chunks don't mention something, IT DOES NOT EXIST for you
+6. Every single fact MUST include a VERBATIM quote as evidence
 
 RESPONSE FORMAT (JSON):
-{
-  "headline": "Clear and factual headline",
-  "summary": "2-3 line summary of main facts",
+{{
+  "headline": "Based ONLY on chunks (or 'No Relevant Information Found' if chunks are off-topic)",
+  "summary": "What the chunks say (or 'These sources discuss [actual topics], not [asked topic]')",
   "facts": [
-    {
-      "claim": "Specific and verifiable fact",
-      "sources": ["URL1", "URL2"],
-      "source_names": ["Source1", "Source2"],
-      "evidence": "Direct quote from chunk",
-      "confidence": "high/medium/low",
-      "consensus": true  // TRUE if 2+ sources confirm
-    }
+    {{
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "evidence": "EXACT quote from chunk - copy/paste verbatim",
+      "confidence": "high only if multiple chunks say exact same thing",
+      "consensus": true/false  // true ONLY if 2+ chunks explicitly state this
+    }}
   ],
-  "divergences": [
-    {
-      "topic": "Aspect where sources differ",
+  "divergences": [  // Only if chunks contradict each other
+    {{
+      "topic": "What they disagree on",
       "versions": [
-        {"source": "Wired", "claim": "...", "url": "..."},
-        {"source": "NYT", "claim": "...", "url": "..."}
+        {{"source": "X", "claim": "EXACT quote from chunk", "url": "..."}}
       ]
-    }
+    }}
   ],
-  "bias_analysis": "How different sources frame this story",
+  "bias_analysis": "ONLY if chunks frame same fact differently (or 'N/A')",
   "consensus_score": 0.0-1.0,
-  "coverage_quality": "high/medium/low"
-}
+  "coverage_quality": "low/medium/high based on chunk relevance"
+}}
 
-CRITICAL RULES:
-1. You have chunks from DIFFERENT sources - USE THEM ALL
-2. For each fact, CHECK if other chunks mention it too
-3. If 2+ sources confirm → "consensus": true + list ALL sources
-4. If only 1 source → "consensus": false + note in divergences
-5. ALWAYS compare how different sources frame the story
-6. NO speculation beyond what chunks state"""
+CRITICAL EXAMPLES:
+
+❌ WRONG - Adding context:
+  Chunk: "Trump announced new tariffs"
+  Fact: "Trump announced new tariffs following previous trade disputes"
+  → NO! "following previous trade disputes" is NOT in chunk
+
+❌ WRONG - General knowledge:
+  Chunk: "Supreme Court ruled"
+  Fact: "The Supreme Court, which is the highest court in the US, ruled"
+  → NO! Don't add "highest court" info
+
+✅ CORRECT:
+  Chunk: "Trump announced a 10% tariff on imports"
+  Fact: "Trump announced a 10% tariff on imports"
+  Evidence: "Trump announced a 10% tariff on imports"
+  → YES! Exact text from chunk
+
+IF CHUNKS ARE OFF-TOPIC:
+{{
+  "headline": "No Relevant Information Found",
+  "summary": "The provided sources discuss [list actual topics in chunks], but do not contain information about [user question]",
+  "facts": [],
+  "coverage_quality": "low"
+}}
+
+Remember: You ONLY know what's in the {num_chunks} chunks below. Nothing else exists.""".format(num_chunks=len(chunks))
+        
+        # Build context from chunks with source labels
+        context_parts = []
+        for i, chunk in enumerate(chunks):
+            # Get chunk with surrounding context
+            chunk_with_context = self.chunker.get_chunk_with_context(chunk, self.chunks)
+            
+            context_parts.append(
+                f"CHUNK {i+1}/{len(chunks)}\n"
+                f"SOURCE: {chunk['source']}\n"
+                f"ARTICLE: {chunk['title']}\n"
+                f"URL: {chunk['url']}\n"
+                f"{'='*80}\n"
+                f"{chunk_with_context}\n"
+                f"{'='*80}"
+            )
+        
+        context = "\n\n".join(context_parts)
+        
+        user_prompt = f"""User question: {query}
+
+THESE ARE THE ONLY {len(chunks)} CHUNKS YOU HAVE ACCESS TO:
+
+{context}
+
+INSTRUCTIONS:
+1. Read each chunk carefully
+2. If chunks are NOT about "{query}", say "No Relevant Information Found"
+3. If chunks ARE relevant, extract ONLY facts that are LITERALLY stated
+4. Include EXACT quotes in the "evidence" field
+5. Do NOT add any information not in these {len(chunks)} chunks
+
+Generate JSON response now:"""
+
+        # Call LLM (much faster now - only ~3-5k tokens instead of 16k)
+        response = self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.1,  # Lower temperature for more factual
+            response_format={"type": "json_object"}
+        )
+        
+        return json.loads(response.choices[0].message.content)
+        """
+        Generate consensus answer from relevant chunks (not full articles).
+        Much faster because we send way less text.
+        """
+        system_prompt = """You are a STRICT fact extractor. You can ONLY use information from the chunks provided below.
+
+ABSOLUTE CONSTRAINTS:
+1. You have EXACTLY {num_chunks} text chunks below - NO OTHER INFORMATION EXISTS
+2. ONLY extract facts that are EXPLICITLY AND LITERALLY stated in these chunks
+3. NEVER add context, background, or general knowledge
+4. NEVER infer or assume anything beyond the exact text
+5. If the chunks don't mention something, IT DOES NOT EXIST for you
+6. Every single fact MUST include a VERBATIM quote as evidence
+
+RESPONSE FORMAT (JSON):
+{{
+  "headline": "Based ONLY on chunks (or 'No Relevant Information Found' if chunks are off-topic)",
+  "summary": "What the chunks say (or 'These sources discuss [actual topics], not [asked topic]')",
+  "facts": [
+    {{
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "evidence": "EXACT quote from chunk - copy/paste verbatim",
+      "confidence": "high only if multiple chunks say exact same thing",
+      "consensus": true/false  // true ONLY if 2+ chunks explicitly state this
+    }}
+  ],
+  "divergences": [  // Only if chunks contradict each other
+    {{
+      "topic": "What they disagree on",
+      "versions": [
+        {{"source": "X", "claim": "EXACT quote from chunk", "url": "..."}}
+      ]
+    }}
+  ],
+  "bias_analysis": "ONLY if chunks frame same fact differently (or 'N/A')",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "low/medium/high based on chunk relevance"
+}}
+
+CRITICAL EXAMPLES:
+
+❌ WRONG - Adding context:
+  Chunk: "Trump announced new tariffs"
+  Fact: "Trump announced new tariffs following previous trade disputes"
+  → NO! "following previous trade disputes" is NOT in chunk
+
+❌ WRONG - General knowledge:
+  Chunk: "Supreme Court ruled"
+  Fact: "The Supreme Court, which is the highest court in the US, ruled"
+  → NO! Don't add "highest court" info
+
+✅ CORRECT:
+  Chunk: "Trump announced a 10% tariff on imports"
+  Fact: "Trump announced a 10% tariff on imports"
+  Evidence: "Trump announced a 10% tariff on imports"
+  → YES! Exact text from chunk
+
+IF CHUNKS ARE OFF-TOPIC:
+{{
+  "headline": "No Relevant Information Found",
+  "summary": "The provided sources discuss [list actual topics in chunks], but do not contain information about [user question]",
+  "facts": [],
+  "coverage_quality": "low"
+}}
+
+Remember: You ONLY know what's in the {num_chunks} chunks below. Nothing else exists."""
 
         # Build context from chunks with source labels
         context_parts = []
@@ -173,17 +325,20 @@ CRITICAL RULES:
         
         user_prompt = f"""User question: {query}
 
-You have {len(chunks)} relevant chunks from DIFFERENT news sources below.
-Each chunk is a paragraph or section from a news article.
-IMPORTANT: Cross-reference them to find what multiple sources agree on.
+You have {len(chunks)} chunks from news sources below.
+
+CRITICAL: Read each chunk carefully. If NONE of them are relevant to the user's question, respond with:
+- headline: "No Relevant Information Found"
+- summary: "The available sources do not contain information about this topic."
+- facts: []
+- coverage_quality: "low"
+
+Only if chunks ARE relevant, extract facts that are EXPLICITLY stated.
 
 Reference chunks:
 {context}
 
-Generate a consensus fact-based article that:
-1. Identifies facts confirmed by MULTIPLE sources (consensus: true)
-2. Notes facts from only ONE source (consensus: false, add to divergences)
-3. Compares how different sources frame this story (bias_analysis)"""
+Generate a response based ONLY on what's in the chunks above. Include the evidence field with EXACT quotes."""
 
         # Call LLM (much faster now - only ~3-5k tokens instead of 16k)
         response = self.client.chat.completions.create(

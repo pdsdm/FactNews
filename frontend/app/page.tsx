@@ -1,7 +1,17 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { Search, RefreshCw, TrendingUp, CheckCircle2, AlertCircle, ChevronRight, ExternalLink, BarChart3, Shield } from 'lucide-react';
+import { useState, useEffect } from "react";
+import {
+  Search,
+  RefreshCw,
+  TrendingUp,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight,
+  ExternalLink,
+  BarChart3,
+  Shield,
+} from "lucide-react";
 
 interface Fact {
   claim: string;
@@ -35,7 +45,7 @@ interface Response {
 }
 
 export default function Home() {
-  const [question, setQuestion] = useState('');
+  const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<Response | null>(null);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
@@ -47,24 +57,24 @@ export default function Home() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8000/stats');
+      const res = await fetch("http://localhost:8000/stats");
       const data = await res.json();
       setStats(data);
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error("Error fetching stats:", error);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch('http://localhost:8000/refresh-news', {
-        method: 'POST'
+      const res = await fetch("http://localhost:8000/refresh-news", {
+        method: "POST",
       });
       const data = await res.json();
       await fetchStats();
     } catch (error) {
-      console.error('Error refreshing news:', error);
+      console.error("Error refreshing news:", error);
     } finally {
       setRefreshing(false);
     }
@@ -77,10 +87,10 @@ export default function Home() {
     setLoading(true);
     setResponse(null);
     try {
-      const res = await fetch('http://localhost:8000/ask', {
-        method: 'POST',
+      const res = await fetch("http://localhost:8000/ask", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ question }),
       });
@@ -88,7 +98,7 @@ export default function Home() {
       const data = await res.json();
       setResponse(data);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
     } finally {
       setLoading(false);
     }
@@ -96,9 +106,9 @@ export default function Home() {
 
   const getConfidenceBadge = (confidence: string) => {
     const styles = {
-      high: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      medium: 'bg-amber-100 text-amber-700 border-amber-200',
-      low: 'bg-rose-100 text-rose-700 border-rose-200',
+      high: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      medium: "bg-amber-100 text-amber-700 border-amber-200",
+      low: "bg-rose-100 text-rose-700 border-rose-200",
     };
     return styles[confidence as keyof typeof styles] || styles.medium;
   };
@@ -117,10 +127,12 @@ export default function Home() {
                 <h1 className="text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
                   Consensus Newsroom
                 </h1>
-                <p className="text-xs text-slate-500">Multi-source fact verification</p>
+                <p className="text-xs text-slate-500">
+                  Multi-source fact verification
+                </p>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               {stats && (
                 <div className="hidden md:flex items-center gap-4 text-sm text-slate-600 bg-slate-100 px-4 py-2 rounded-lg">
@@ -137,7 +149,9 @@ export default function Home() {
                 disabled={refreshing}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
               >
-                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <RefreshCw
+                  className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+                />
                 Refresh
               </button>
             </div>
@@ -153,20 +167,21 @@ export default function Home() {
             Powered by Chunk-level RAG
           </div>
           <h2 className="text-5xl font-bold text-slate-900 mb-6 leading-tight">
-            Verify facts across<br />
+            Verify facts across
+            <br />
             <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
               multiple news sources
             </span>
           </h2>
           <p className="text-xl text-slate-600 mb-12 max-w-2xl mx-auto">
-            Get consensus-based answers backed by evidence from top news outlets. 
-            Detect bias, find truth.
+            Get consensus-based answers backed by evidence from top news
+            outlets. Detect bias, find truth.
           </p>
         </div>
       )}
 
       {/* Search Bar */}
-      <div className={`max-w-4xl mx-auto px-6 ${response ? 'pt-8' : ''}`}>
+      <div className={`max-w-4xl mx-auto px-6 ${response ? "pt-8" : ""}`}>
         <form onSubmit={handleAsk} className="relative">
           <div className="relative">
             <Search className="absolute left-6 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -209,16 +224,23 @@ export default function Home() {
                 <CheckCircle2 className="w-5 h-5 text-emerald-500" />
               </div>
               <div className="text-3xl font-bold text-slate-900">
-                {Math.round(response.consensus_score * 100)}%
+                {response.facts.length === 0
+                  ? "N/A"
+                  : `${Math.round(response.consensus_score * 100)}%`}
               </div>
               <div className="mt-3 w-full bg-slate-100 rounded-full h-2">
-                <div 
+                <div
                   className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${response.consensus_score * 100}%` }}
+                  style={{
+                    width:
+                      response.facts.length === 0
+                        ? "0%"
+                        : `${response.consensus_score * 100}%`,
+                  }}
                 />
               </div>
             </div>
-            
+
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-slate-600">Sources Analyzed</span>
@@ -228,20 +250,32 @@ export default function Home() {
                 {response.sources_analyzed || response.chunks_used || 0}
               </div>
               <div className="mt-3 text-sm text-slate-500">
-                From top outlets
+                {response.facts.length === 0
+                  ? "No relevant coverage"
+                  : "From top outlets"}
               </div>
             </div>
-            
+
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-slate-600">Coverage Quality</span>
                 <TrendingUp className="w-5 h-5 text-purple-500" />
               </div>
-              <div className="text-3xl font-bold text-slate-900 capitalize">
-                {response.coverage_quality || 'High'}
+              <div
+                className={`text-3xl font-bold capitalize ${
+                  response.coverage_quality === "low"
+                    ? "text-amber-600"
+                    : response.coverage_quality === "medium"
+                      ? "text-blue-600"
+                      : "text-emerald-600"
+                }`}
+              >
+                {response.coverage_quality || "High"}
               </div>
               <div className="mt-3 text-sm text-slate-500">
-                Multi-source verified
+                {response.facts.length === 0
+                  ? "Topic not covered"
+                  : "Multi-source verified"}
               </div>
             </div>
           </div>
@@ -261,70 +295,87 @@ export default function Home() {
           )}
 
           {/* Verified Facts */}
-          <div className="mb-8">
-            <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-              Verified Facts
-            </h3>
-            <div className="space-y-3">
-              {response.facts.map((fact, idx) => (
-                <div key={idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
-                      {idx + 1}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-slate-900 font-medium mb-3 leading-relaxed">
-                        {fact.claim}
-                      </p>
-                      
-                      <div className="flex flex-wrap items-center gap-2 mb-3">
-                        {fact.source_names && fact.source_names.length > 0 ? (
-                          fact.source_names.map((name, i) => (
-                            <a
-                              key={i}
-                              href={fact.sources[i]}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
-                            >
-                              {name}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ))
-                        ) : (
-                          fact.sources.map((url, i) => (
-                            <a
-                              key={i}
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
-                            >
-                              Source {i + 1}
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          ))
-                        )}
+          {response.facts.length > 0 ? (
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                Verified Facts
+              </h3>
+              <div className="space-y-3">
+                {response.facts.map((fact, idx) => (
+                  <div
+                    key={idx}
+                    className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
+                        {idx + 1}
                       </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getConfidenceBadge(fact.confidence)}`}>
-                          {fact.confidence.toUpperCase()} CONFIDENCE
-                        </span>
-                        {fact.consensus && (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3" />
-                            CONSENSUS
+                      <div className="flex-1">
+                        <p className="text-slate-900 font-medium mb-3 leading-relaxed">
+                          {fact.claim}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                          {fact.source_names && fact.source_names.length > 0
+                            ? fact.source_names.map((name, i) => (
+                                <a
+                                  key={i}
+                                  href={fact.sources[i]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                                >
+                                  {name}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ))
+                            : fact.sources.map((url, i) => (
+                                <a
+                                  key={i}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                                >
+                                  Source {i + 1}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ))}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getConfidenceBadge(fact.confidence)}`}
+                          >
+                            {fact.confidence.toUpperCase()} CONFIDENCE
                           </span>
-                        )}
+                          {fact.consensus && (
+                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" />
+                              CONSENSUS
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="mb-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center">
+              <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">
+                No Verified Facts Found
+              </h3>
+              <p className="text-slate-500">
+                The available sources do not contain information about this
+                topic. Try asking about recent news events covered by major
+                outlets.
+              </p>
+            </div>
+          )}
 
           {/* Divergences */}
           {response.divergences && response.divergences.length > 0 && (
@@ -335,11 +386,19 @@ export default function Home() {
               </h3>
               <div className="space-y-4">
                 {response.divergences.map((div, idx) => (
-                  <div key={idx} className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
-                    <h4 className="font-semibold text-slate-900 mb-3">{div.topic}</h4>
+                  <div
+                    key={idx}
+                    className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200"
+                  >
+                    <h4 className="font-semibold text-slate-900 mb-3">
+                      {div.topic}
+                    </h4>
                     <div className="space-y-3">
                       {div.versions.map((version, i) => (
-                        <div key={i} className="bg-white/80 rounded-lg p-4 border border-amber-100">
+                        <div
+                          key={i}
+                          className="bg-white/80 rounded-lg p-4 border border-amber-100"
+                        >
                           <div className="flex items-start gap-3">
                             <span className="px-2 py-1 bg-amber-200 text-amber-800 text-xs font-bold rounded">
                               {version.source}
@@ -347,9 +406,9 @@ export default function Home() {
                             <p className="flex-1 text-sm text-slate-700">
                               {version.claim}
                             </p>
-                            <a 
-                              href={version.url} 
-                              target="_blank" 
+                            <a
+                              href={version.url}
+                              target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:text-blue-700"
                             >
