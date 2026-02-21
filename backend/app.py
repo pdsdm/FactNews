@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from rag import rag
 from rss_ingester import ingest_news
 from clustering import ArticleClusterer, detect_bias_in_cluster
+from inference import list_providers, get_provider
 import os
 
 app = FastAPI(title="Consensus Newsroom API")
@@ -51,9 +52,11 @@ class ConsensusResponse(BaseModel):
 def read_root():
     return {
         "status": "Consensus Newsroom API running",
-        "phase": "FASE 3.5 - Full Scraping + Clustering + Bias Detection",
+        "phase": "FASE 4 - Multi-Provider Inference + Model Council",
         "articles_loaded": len(rag.articles),
-        "embeddings_ready": len(rag.embeddings) > 0
+        "embeddings_ready": len(rag.embeddings) > 0,
+        "inference_provider": rag.provider.name,
+        "available_providers": list_providers(),
     }
 
 @app.get("/stats")
@@ -64,23 +67,20 @@ def get_stats():
         "total_articles": len(rag.articles),
         "fully_scraped": scraped_count,
         "embeddings_created": len(rag.embeddings),
-        "has_openai_key": bool(os.getenv("OPENAI_API_KEY"))
+        "inference_provider": rag.provider.name,
+        "embed_provider": rag.embed_provider.name,
+        "available_providers": list_providers(),
     }
 
 @app.post("/create-embeddings")
 async def create_embeddings():
     """Force creation of embeddings for all articles"""
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500,
-            detail="OpenAI API key not configured"
-        )
-    
     try:
         rag.create_embeddings()
         return {
             "success": True,
             "message": f"Created embeddings for {len(rag.embeddings)} articles",
+            "embed_provider": rag.embed_provider.name,
             "total_articles": len(rag.articles)
         }
     except Exception as e:
@@ -100,10 +100,12 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
         
         # Recreate embeddings
         rag.embeddings = []
-        if os.getenv("OPENAI_API_KEY"):
-            print("🔄 Creating embeddings for new articles...")
+        try:
+            print(f"Creating embeddings via {rag.embed_provider.name}...")
             rag.create_embeddings()
-            print(f"✅ Created {len(rag.embeddings)} embeddings")
+            print(f"Created {len(rag.embeddings)} embeddings")
+        except Exception as e:
+            print(f"Could not create embeddings: {e}")
         
         return {
             "success": True,
@@ -117,12 +119,6 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
 @app.post("/ask")
 def ask_question(request: QuestionRequest) -> ConsensusResponse:
     """Generate consensus article from multiple sources"""
-    
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500, 
-            detail="OpenAI API key not configured. Add OPENAI_API_KEY to .env file"
-        )
     
     try:
         # 1. Search relevant articles - GET MORE from DIVERSE sources
