@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from rag import rag
+from rss_ingester import ingest_news
+from clustering import ArticleClusterer, detect_bias_in_cluster
 import os
 
 app = FastAPI(title="Consensus Newsroom API")
@@ -15,26 +17,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize clusterer
+clusterer = ArticleClusterer(similarity_threshold=0.3)
+
 class QuestionRequest(BaseModel):
     question: str
 
 class Fact(BaseModel):
     claim: str
     sources: list[str]
+    source_names: list[str] | None = None
     confidence: str
     evidence: str | None = None
+    consensus: bool | None = None
+
+class Divergence(BaseModel):
+    topic: str
+    versions: list[dict]
 
 class ConsensusResponse(BaseModel):
-    answer: str
+    headline: str | None = None
+    summary: str | None = None
+    answer: str | None = None
     facts: list[Fact]
+    divergences: list[Divergence] | None = None
+    bias_analysis: str | None = None
     consensus_score: float
+    coverage_quality: str | None = None
     articles_used: int | None = None
+    clusters_found: int | None = None
 
 @app.get("/")
 def read_root():
     return {
         "status": "Consensus Newsroom API running",
-        "phase": "FASE 2 - RAG + LLM",
+        "phase": "FASE 3.5 - Full Scraping + Clustering + Bias Detection",
         "articles_loaded": len(rag.articles),
         "embeddings_ready": len(rag.embeddings) > 0
     }
@@ -42,15 +59,64 @@ def read_root():
 @app.get("/stats")
 def get_stats():
     """Get system statistics"""
+    scraped_count = sum(1 for art in rag.articles if art.get('scraped', False))
     return {
         "total_articles": len(rag.articles),
+        "fully_scraped": scraped_count,
         "embeddings_created": len(rag.embeddings),
         "has_openai_key": bool(os.getenv("OPENAI_API_KEY"))
     }
 
+@app.post("/create-embeddings")
+async def create_embeddings():
+    """Force creation of embeddings for all articles"""
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=500,
+            detail="OpenAI API key not configured"
+        )
+    
+    try:
+        rag.create_embeddings()
+        return {
+            "success": True,
+            "message": f"Created embeddings for {len(rag.embeddings)} articles",
+            "total_articles": len(rag.articles)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating embeddings: {str(e)}")
+
+@app.post("/refresh-news")
+async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, days_back: int = 4):
+    """Fetch latest news from RSS feeds with full article scraping"""
+    try:
+        # Ingest news with full scraping
+        stats = ingest_news(max_feeds=max_feeds, scrape_full=scrape_full, days_back=days_back)
+        
+        # Reload articles in RAG
+        import json
+        with open("news.json", 'r', encoding='utf-8') as f:
+            rag.articles = json.load(f)
+        
+        # Recreate embeddings
+        rag.embeddings = []
+        if os.getenv("OPENAI_API_KEY"):
+            print("🔄 Creating embeddings for new articles...")
+            rag.create_embeddings()
+            print(f"✅ Created {len(rag.embeddings)} embeddings")
+        
+        return {
+            "success": True,
+            "message": "Noticias actualizadas con scraping completo",
+            **stats
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating news: {str(e)}")
+
 @app.post("/ask")
 def ask_question(request: QuestionRequest) -> ConsensusResponse:
-    """FASE 2: RAG with real LLM"""
+    """Generate consensus article from multiple sources"""
     
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
@@ -59,28 +125,54 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
         )
     
     try:
-        # 1. Search relevant articles
-        relevant_articles = rag.search(request.question, top_k=5)
+        # 1. Search relevant articles (get more for clustering)
+        relevant_articles = rag.search(request.question, top_k=10)
         
-        # 2. Generate answer with LLM
-        llm_response = rag.generate_answer(request.question, relevant_articles)
+        if not relevant_articles:
+            raise HTTPException(status_code=404, detail="No relevant articles found")
         
-        # 3. Format response
+        # 2. Cluster similar articles (same story from different sources)
+        clusters = clusterer.get_story_clusters(relevant_articles)
+        
+        # 3. Use top cluster (most sources covering same story)
+        main_cluster = clusters[0] if clusters else {"articles": relevant_articles}
+        articles_to_analyze = main_cluster.get("articles", relevant_articles)[:5]
+        
+        # 4. Generate consensus article with LLM
+        llm_response = rag.generate_answer(request.question, articles_to_analyze)
+        
+        # 5. Format response
         facts = [
             Fact(
                 claim=fact.get("claim", ""),
                 sources=fact.get("sources", []),
+                source_names=fact.get("source_names", []),
                 confidence=fact.get("confidence", "medium"),
-                evidence=fact.get("evidence")
+                evidence=fact.get("evidence"),
+                consensus=fact.get("consensus", False)
             )
             for fact in llm_response.get("facts", [])
         ]
         
+        divergences = [
+            Divergence(
+                topic=div.get("topic", ""),
+                versions=div.get("versions", [])
+            )
+            for div in llm_response.get("divergences", [])
+        ]
+        
         return ConsensusResponse(
-            answer=llm_response.get("answer", "No se pudo generar respuesta"),
+            headline=llm_response.get("headline"),
+            summary=llm_response.get("summary"),
+            answer=llm_response.get("answer"),
             facts=facts,
+            divergences=divergences if divergences else None,
+            bias_analysis=llm_response.get("bias_analysis"),
             consensus_score=llm_response.get("consensus_score", 0.5),
-            articles_used=len(relevant_articles)
+            coverage_quality=llm_response.get("coverage_quality"),
+            articles_used=len(articles_to_analyze),
+            clusters_found=len(clusters)
         )
     
     except Exception as e:

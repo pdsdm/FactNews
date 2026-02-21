@@ -17,6 +17,15 @@ class SimpleRAG:
             self.articles = json.load(f)
         
         print(f"📰 Loaded {len(self.articles)} articles")
+        
+        # Auto-create embeddings if OpenAI key is available
+        if os.getenv("OPENAI_API_KEY") and len(self.articles) > 0:
+            print("🔄 Auto-creating embeddings...")
+            try:
+                self.create_embeddings()
+            except Exception as e:
+                print(f"⚠️  Could not create embeddings: {e}")
+                print("   → Add OPENAI_API_KEY to .env or call /create-embeddings endpoint")
     
     def create_embeddings(self):
         """Create embeddings for all articles"""
@@ -68,43 +77,63 @@ class SimpleRAG:
         return results
     
     def generate_answer(self, query: str, context_articles: List[Dict]) -> Dict:
-        """Generate answer using GPT-4 with context"""
+        """Generate FACT-BASED answer using GPT-4 with context"""
         
         # Build context from articles
         context = "\n\n".join([
-            f"[{art['source']}] {art['title']}\n{art['content']}\nURL: {art['url']}"
+            f"[{art['source']} - {art['date']}]\nTítulo: {art['title']}\nContenido: {art['content'][:1500]}\nURL: {art['url']}"
             for art in context_articles
         ])
         
-        system_prompt = """Eres un asistente de verificación de noticias. 
-Tu tarea es responder preguntas basándote SOLO en los artículos proporcionados.
+        system_prompt = """Eres un periodista de investigación especializado en verificación de hechos.
 
-Para cada afirmación que hagas:
-1. Cita la fuente específica
-2. Incluye el URL del artículo
-3. Indica el nivel de consenso entre fuentes (alto/medio/bajo)
-4. Si algo no está en los artículos, dilo claramente
+TU MISIÓN:
+- Generar un artículo BASADO EN HECHOS (NO opiniones, NO especulación)
+- Cada afirmación DEBE estar respaldada por al menos una fuente
+- Identifica CONSENSO (qué dicen múltiples fuentes) vs DIVERGENCIAS (qué solo dice una)
+- Detecta SESGOS comparando cómo diferentes medios reportan el mismo hecho
 
-Responde en formato JSON con esta estructura:
+FORMATO DE RESPUESTA (JSON):
 {
-  "answer": "Respuesta clara y concisa",
+  "headline": "Titular claro y factual",
+  "summary": "Resumen de 2-3 líneas con los hechos principales",
   "facts": [
     {
-      "claim": "Afirmación específica",
+      "claim": "Hecho específico y verificable",
       "sources": ["URL1", "URL2"],
-      "evidence": "Cita textual o resumen",
-      "confidence": "high/medium/low"
+      "source_names": ["Source1", "Source2"],
+      "evidence": "Cita textual o dato concreto",
+      "confidence": "high/medium/low",
+      "consensus": true/false
     }
   ],
-  "consensus_score": 0.0-1.0
-}"""
+  "divergences": [
+    {
+      "topic": "Aspecto en el que difieren las fuentes",
+      "versions": [
+        {"source": "X", "claim": "...", "url": "..."}
+      ]
+    }
+  ],
+  "bias_analysis": "Breve análisis de sesgos detectados (si los hay)",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "high/medium/low"
+}
+
+REGLAS:
+1. Solo incluye hechos verificables en 'facts'
+2. Si hay contradicciones, van en 'divergences'
+3. 'consensus': true si 2+ fuentes confirman el hecho
+4. 'confidence' basada en: número de fuentes, calidad de evidencia, consistencia
+5. NO especules ni interpretes más allá de lo que dicen las fuentes
+6. Si algo no está claro, márcalo como 'low confidence'"""
         
-        user_prompt = f"""Pregunta: {query}
+        user_prompt = f"""Pregunta del usuario: {query}
 
 Artículos de referencia:
 {context}
 
-Genera una respuesta basada únicamente en estos artículos."""
+Genera un artículo basado en hechos verificables extraídos de estos artículos."""
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
@@ -112,7 +141,7 @@ Genera una respuesta basada únicamente en estos artículos."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.3,
+            temperature=0.1,  # Muy baja para maximizar factualidad
             response_format={"type": "json_object"}
         )
         

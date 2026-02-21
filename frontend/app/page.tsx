@@ -1,24 +1,73 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Fact {
   claim: string;
   sources: string[];
+  source_names?: string[];
   confidence: string;
+  evidence?: string;
+  consensus?: boolean;
+}
+
+interface Divergence {
+  topic: string;
+  versions: Array<{source: string; claim: string; url: string}>;
 }
 
 interface ConsensusResponse {
-  answer: string;
+  headline?: string;
+  summary?: string;
+  answer?: string;
   facts: Fact[];
+  divergences?: Divergence[];
+  bias_analysis?: string;
   consensus_score: number;
+  coverage_quality?: string;
   articles_used?: number;
+  clusters_found?: number;
 }
 
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<ConsensusResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<{ total_articles: number } | null>(null);
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch("http://localhost:8000/stats");
+      const data = await res.json();
+      setStats(data);
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch("http://localhost:8000/refresh-news", {
+        method: "POST",
+      });
+      const data = await res.json();
+      alert(
+        `Noticias actualizadas!\n${data.total_articles} artículos de ${data.sources} fuentes`,
+      );
+      fetchStats();
+    } catch (error) {
+      console.error("Error:", error);
+      alert("Error actualizando noticias");
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
 
   const handleAsk = async () => {
     if (!question.trim()) return;
@@ -59,10 +108,24 @@ export default function Home() {
         <h1 className="text-5xl font-bold text-center mb-2 text-gray-800">
           Consensus Newsroom
         </h1>
-        <p className="text-center text-gray-600 mb-8">
+        <p className="text-center text-gray-600 mb-4">
           Pregunta cualquier cosa y obtén respuestas verificadas por múltiples
           fuentes
         </p>
+
+        {/* Stats bar */}
+        <div className="flex justify-center gap-4 mb-8">
+          <div className="bg-white px-4 py-2 rounded-lg shadow text-sm">
+            {stats?.total_articles || 0} artículos
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-2 rounded-lg shadow text-sm font-medium disabled:opacity-50 transition"
+          >
+            {refreshing ? "Actualizando..." : "Actualizar Noticias"}
+          </button>
+        </div>
 
         {/* Input */}
         <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
@@ -129,7 +192,7 @@ export default function Home() {
                           rel="noopener noreferrer"
                           className="text-xs px-2 py-1 bg-white rounded border border-gray-300 hover:bg-gray-50 transition"
                         >
-                          📰 Fuente {idx + 1}
+                          Fuente {idx + 1}
                         </a>
                       ))}
                     </div>
@@ -160,8 +223,11 @@ export default function Home() {
         {/* Info FASE */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
           <p className="text-sm text-blue-800">
-            🚀 <strong>FASE 2 - RAG + LLM Real</strong> | OpenAI GPT-4 analizando 10 artículos reales con embeddings.
-            {response && response.articles_used && <span className="ml-2">📊 Usados: {response.articles_used} artículos</span>}
+            🚀 <strong>FASE 3.5 - Full Scraping + Clustering + Bias Detection</strong> | 
+            Artículos completos scrapeados + detección de sesgos + conexión entre noticias.
+            {response && response.clusters_found && response.clusters_found > 1 && (
+              <span className="ml-2">🔗 {response.clusters_found} historias relacionadas</span>
+            )}
           </p>
         </div>
       </div>
