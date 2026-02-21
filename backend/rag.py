@@ -9,7 +9,7 @@ load_dotenv()
 
 
 class SimpleRAG:
-    def __init__(self, news_file: str = "news.json", provider: str = "crusoe", embed_provider: str = "openai"):
+    def __init__(self, news_file: str = "news.json", provider: str = "crusoe", embed_provider: str = "google"):
         """
         Args:
             news_file: Path to the news JSON file.

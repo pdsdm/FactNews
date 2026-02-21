@@ -183,7 +183,7 @@ class RSSIngester:
         }
 
 
-def ingest_news(max_feeds: int = None, scrape_full: bool = True, days_back: int = 4) -> Dict:
+def ingest_news(max_feeds: int | None = None, scrape_full: bool = True, days_back: int = 4) -> Dict:
     """Main function to ingest news from RSS feeds"""
     ingester = RSSIngester()
     articles = ingester.fetch_all(max_feeds=max_feeds, scrape_full=scrape_full, days_back=days_back)

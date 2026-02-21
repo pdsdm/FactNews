@@ -13,6 +13,8 @@ import {
   Shield,
 } from "lucide-react";
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://100.98.98.88:8000";
+
 interface Fact {
   claim: string;
   sources: string[];
@@ -50,6 +52,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -57,24 +60,30 @@ export default function Home() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("http://localhost:8000/stats");
+      const res = await fetch(`${API}/stats`);
+      if (!res.ok) throw new Error(`Stats error: ${res.status}`);
       const data = await res.json();
       setStats(data);
-    } catch (error) {
-      console.error("Error fetching stats:", error);
+    } catch (err) {
+      console.error("Error fetching stats:", err);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("http://localhost:8000/refresh-news", {
+      const res = await fetch(`${API}/refresh-news`, {
         method: "POST",
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+      alert(
+        `News updated!\n${data.total_articles} articles from ${data.sources} sources`,
+      );
       await fetchStats();
-    } catch (error) {
-      console.error("Error refreshing news:", error);
+    } catch (err) {
+      console.error("Error refreshing news:", err);
+      alert(`Error updating news: ${err instanceof Error ? err.message : err}`);
     } finally {
       setRefreshing(false);
     }
@@ -86,8 +95,10 @@ export default function Home() {
 
     setLoading(true);
     setResponse(null);
+    setError(null);
+
     try {
-      const res = await fetch("http://localhost:8000/ask", {
+      const res = await fetch(`${API}/ask`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -96,9 +107,13 @@ export default function Home() {
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
       setResponse(data);
-    } catch (error) {
-      console.error("Error:", error);
+    } catch (err) {
+      console.error("Error:", err);
+      setError(
+        err instanceof Error ? err.message : "Error connecting to backend.",
+      );
     } finally {
       setLoading(false);
     }
@@ -213,6 +228,15 @@ export default function Home() {
         </form>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="max-w-5xl mx-auto px-6 mt-6">
+          <div className="bg-red-50 border border-red-300 text-red-800 rounded-lg p-4">
+            <strong>Error:</strong> {error}
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {response && (
         <div className="max-w-5xl mx-auto px-6 py-12">
@@ -294,88 +318,97 @@ export default function Home() {
             </div>
           )}
 
-          {/* Verified Facts */}
-          {response.facts.length > 0 ? (
-            <div className="mb-8">
-              <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <CheckCircle2 className="w-6 h-6 text-emerald-500" />
-                Verified Facts
+          {/* Answer fallback */}
+          {response.answer && !response.headline && (
+            <div className="bg-white rounded-2xl p-8 mb-6 border border-slate-200 shadow-sm">
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">
+                Answer
               </h3>
-              <div className="space-y-3">
-                {response.facts.map((fact, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
-                        {idx + 1}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-slate-900 font-medium mb-3 leading-relaxed">
-                          {fact.claim}
-                        </p>
-
-                        <div className="flex flex-wrap items-center gap-2 mb-3">
-                          {fact.source_names && fact.source_names.length > 0
-                            ? fact.source_names.map((name, i) => (
-                                <a
-                                  key={i}
-                                  href={fact.sources[i]}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
-                                >
-                                  {name}
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ))
-                            : fact.sources.map((url, i) => (
-                                <a
-                                  key={i}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
-                                >
-                                  Source {i + 1}
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              ))}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getConfidenceBadge(fact.confidence)}`}
-                          >
-                            {fact.confidence.toUpperCase()} CONFIDENCE
-                          </span>
-                          {fact.consensus && (
-                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3" />
-                              CONSENSUS
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="mb-8 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-12 text-center">
-              <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-slate-700 mb-2">
-                No Verified Facts Found
-              </h3>
-              <p className="text-slate-500">
-                The available sources do not contain information about this
-                topic. Try asking about recent news events covered by major
-                outlets.
+              <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                {response.answer}
               </p>
             </div>
           )}
+
+          {/* Verified Facts */}
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              Verified Facts
+            </h3>
+            <div className="space-y-3">
+              {response.facts.map((fact, idx) => (
+                <div
+                  key={idx}
+                  className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
+                      {idx + 1}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-slate-900 font-medium mb-3 leading-relaxed">
+                        {fact.claim}
+                      </p>
+
+                      {fact.evidence && (
+                        <p className="text-sm italic text-slate-500 mb-3">
+                          &ldquo;{fact.evidence}&rdquo;
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        {fact.source_names && fact.source_names.length > 0
+                          ? fact.source_names.map((name, i) => (
+                              <a
+                                key={i}
+                                href={fact.sources[i]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                              >
+                                {name}
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ))
+                          : fact.sources.map((url, i) => (
+                              <a
+                                key={i}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                              >
+                                Source {i + 1}
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                            ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getConfidenceBadge(fact.confidence)}`}
+                        >
+                          {fact.confidence.toUpperCase()} CONFIDENCE
+                        </span>
+                        {fact.consensus && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            CONSENSUS
+                          </span>
+                        )}
+                        {fact.consensus === false && (
+                          <span className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium border border-orange-200">
+                            Single source
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
           {/* Divergences */}
           {response.divergences && response.divergences.length > 0 && (

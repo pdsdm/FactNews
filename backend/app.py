@@ -11,7 +11,7 @@ app = FastAPI(title="Consensus Newsroom API")
 # CORS para Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://100.98.98.88:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -160,11 +160,19 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
         
         # Count unique sources
         unique_sources = len(set(c['source'] for c in diverse_chunks))
+
+        # Build answer from headline + summary if LLM didn't return an explicit answer field
+        headline = llm_response.get("headline")
+        summary = llm_response.get("summary")
+        answer = llm_response.get("answer") or (
+            f"{headline}\n\n{summary}" if headline and summary
+            else headline or summary or "No answer generated."
+        )
         
         return ConsensusResponse(
-            headline=llm_response.get("headline"),
-            summary=llm_response.get("summary"),
-            answer=llm_response.get("answer"),
+            headline=headline,
+            summary=summary,
+            answer=answer,
             facts=facts,
             divergences=divergences if divergences else None,
             bias_analysis=llm_response.get("bias_analysis"),
