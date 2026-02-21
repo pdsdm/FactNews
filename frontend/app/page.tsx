@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Search,
   RefreshCw,
@@ -11,6 +11,8 @@ import {
   ExternalLink,
   BarChart3,
   Shield,
+  Zap,
+  Loader2,
 } from "lucide-react";
 import { basepath } from "./env";
 
@@ -46,6 +48,7 @@ interface Response {
   coverage_quality?: string;
   chunks_used?: number;
   sources_analyzed?: number;
+  cached?: boolean;
 }
 
 interface Stats {
@@ -53,18 +56,37 @@ interface Stats {
   chunks_created: number;
   sources: number;
   embeddings_ready: boolean;
+  cache_stats?: {
+    response: { redis_cached?: number; memory_cached?: number };
+    embeddings: { lru_cache?: { hit_rate?: number } };
+  };
+  metrics?: {
+    requests_total: number;
+    requests_cached: number;
+    avg_response_time_ms: number;
+  };
+}
+
+interface Suggestion {
+  title: string;
+  chunks: number;
 }
 
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [response, setResponse] = useState<Response | null>(null);
   const [loading, setLoading] = useState(false);
+  const [streamingStatus, setStreamingStatus] = useState<string | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [useStreaming, setUseStreaming] = useState(true);
 
   useEffect(() => {
     fetchStats();
+    fetchSuggestions();
   }, []);
 
   const fetchStats = async () => {
@@ -78,15 +100,31 @@ export default function Home() {
     }
   };
 
+  const fetchSuggestions = async () => {
+    try {
+      const res = await fetch(`${API}/suggestions?limit=5`);
+      if (res.ok) {
+        const data = await res.json();
+        setSuggestions(data.suggestions || []);
+      }
+    } catch (err) {
+      console.error("Error fetching suggestions:", err);
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${API}/refresh-news`, {
+      const res = await fetch(`${API}/refresh-news?background=true`, {
         method: "POST",
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
-      await fetchStats();
+      
+      setTimeout(() => {
+        fetchStats();
+        fetchSuggestions();
+      }, 2000);
     } catch (err) {
       console.error("Error refreshing news:", err);
     } finally {
@@ -94,10 +132,85 @@ export default function Home() {
     }
   };
 
-  const handleAsk = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!question.trim()) return;
+  const handleAskStreaming = async (questionText: string) => {
+    setLoading(true);
+    setResponse(null);
+    setError(null);
+    setStreamingStatus("Connecting...");
 
+    try {
+      const res = await fetch(`${API}/ask/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: questionText }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || `Error ${res.status}`);
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No response body");
+
+      const decoder = new TextDecoder();
+      let result: Response | null = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n").filter((line) => line.startsWith("data: "));
+
+        for (const line of lines) {
+          const jsonStr = line.slice(6);
+          try {
+            const data = JSON.parse(jsonStr);
+            
+            if (data.status === "searching") {
+              setStreamingStatus("Searching relevant chunks...");
+            } else if (data.status === "found") {
+              setStreamingStatus(`Found ${data.chunks} relevant chunks`);
+            } else if (data.status === "diversifying") {
+              setStreamingStatus(`Selected ${data.selected} diverse chunks`);
+            } else if (data.status === "generating") {
+              setStreamingStatus("Generating consensus...");
+            } else if (data.status === "complete") {
+              result = data.response;
+              setStreamingStatus(null);
+            } else if (data.status === "error") {
+              throw new Error(data.message);
+            }
+          } catch {
+            continue;
+          }
+        }
+      }
+
+      if (result) {
+        const formattedResponse: Response = {
+          ...result,
+          facts: (result.facts || []).map((fact: Fact) => ({
+            ...fact,
+            sources: fact.sources || [],
+            source_names: fact.source_names || [],
+            consensus: fact.consensus ?? false,
+          })),
+        };
+        setResponse(formattedResponse);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Error connecting to backend."
+      );
+    } finally {
+      setLoading(false);
+      setStreamingStatus(null);
+    }
+  };
+
+  const handleAskStandard = async (questionText: string) => {
     setLoading(true);
     setResponse(null);
     setError(null);
@@ -105,10 +218,8 @@ export default function Home() {
     try {
       const res = await fetch(`${API}/ask`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ question }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: questionText }),
       });
 
       const data = await res.json();
@@ -116,13 +227,33 @@ export default function Home() {
 
       setResponse(data);
     } catch (err) {
-      console.error("Error:", err);
       setError(
-        err instanceof Error ? err.message : "Error connecting to backend.",
+        err instanceof Error ? err.message : "Error connecting to backend."
       );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!question.trim()) return;
+
+    setShowSuggestions(false);
+    
+    if (useStreaming) {
+      await handleAskStreaming(question);
+    } else {
+      await handleAskStandard(question);
+    }
+    
+    fetchStats();
+  };
+
+  const handleSuggestionClick = (title: string) => {
+    const query = title.replace(/^\[.*?\]\s*/, "").split("\n")[0];
+    setQuestion(query);
+    setShowSuggestions(false);
   };
 
   const getConfidenceBadge = (confidence: string) => {
@@ -163,6 +294,15 @@ export default function Home() {
                   </span>
                   <span className="text-slate-300">•</span>
                   <span>{stats.sources} sources</span>
+                  {stats.metrics && (
+                    <>
+                      <span className="text-slate-300">•</span>
+                      <span className="flex items-center gap-1">
+                        <Zap className="w-4 h-4 text-amber-500" />
+                        {stats.metrics.avg_response_time_ms.toFixed(0)}ms avg
+                      </span>
+                    </>
+                  )}
                 </div>
               )}
               <button
@@ -185,7 +325,7 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6">
             <TrendingUp className="w-4 h-4" />
-            Powered by Chunk-level RAG
+            Powered by Chunk-level RAG + Multi-LLM Council
           </div>
           <h2 className="text-5xl font-bold text-slate-900 mb-6 leading-tight">
             Verify facts across
@@ -198,6 +338,24 @@ export default function Home() {
             Get consensus-based answers backed by evidence from top news
             outlets. Detect bias, find truth.
           </p>
+          
+          {/* Suggestions */}
+          {suggestions.length > 0 && showSuggestions && (
+            <div className="max-w-2xl mx-auto mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-4">
+              <p className="text-sm text-slate-500 mb-3">Suggested topics:</p>
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleSuggestionClick(s.title)}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 rounded-full text-sm transition-colors text-left"
+                  >
+                    {s.title.substring(0, 50)}...
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -209,29 +367,54 @@ export default function Home() {
             <input
               type="text"
               value={question}
-              onChange={(e) => setQuestion(e.target.value)}
+              onChange={(e) => {
+                setQuestion(e.target.value);
+                setShowSuggestions(true);
+              }}
+              onFocus={() => setShowSuggestions(true)}
               placeholder="Ask about any recent news event..."
-              className="w-full pl-14 pr-32 py-5 text-lg border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white shadow-sm"
+              className="w-full pl-14 pr-48 py-5 text-lg border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white shadow-sm"
             />
-            <button
-              type="submit"
-              disabled={loading || !question.trim()}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-500/30"
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Analyzing
-                </>
-              ) : (
-                <>
-                  Search
-                  <ChevronRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
+            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-slate-500 mr-2">
+                <input
+                  type="checkbox"
+                  checked={useStreaming}
+                  onChange={(e) => setUseStreaming(e.target.checked)}
+                  className="rounded"
+                />
+                Stream
+              </label>
+              <button
+                type="submit"
+                disabled={loading || !question.trim()}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-500/30"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {streamingStatus ? "Streaming" : "Analyzing"}
+                  </>
+                ) : (
+                  <>
+                    Search
+                    <ChevronRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
+        
+        {/* Streaming Status */}
+        {streamingStatus && (
+          <div className="mt-4 text-center">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              {streamingStatus}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error banner */}
@@ -246,6 +429,16 @@ export default function Home() {
       {/* Results */}
       {response && (
         <div className="max-w-5xl mx-auto px-6 py-12">
+          {/* Cached indicator */}
+          {response.cached && (
+            <div className="mb-4 text-right">
+              <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs">
+                <Zap className="w-3 h-3" />
+                Cached response
+              </span>
+            </div>
+          )}
+          
           {/* No Relevant Information Alert */}
           {response.facts.length === 0 ? (
             <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-8 text-center">
