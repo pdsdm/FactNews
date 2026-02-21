@@ -1,6 +1,11 @@
 """
 Optimized Chunk-level RAG with numpy-based embedding storage.
 Uses binary numpy format instead of JSON for 10x faster loading.
+
+Embedding lookup order:
+  1. Redis cache (fast, shared across processes, TTL-managed)
+  2. NumPy .npz file (local fallback when Redis unavailable)
+  3. OpenAI API (only for embeddings not found in either cache)
 """
 import os
 import json
@@ -8,6 +13,7 @@ import numpy as np
 from openai import OpenAI
 from typing import List, Dict, Optional
 from chunker import ArticleChunker
+from embedding_cache import EmbeddingCache
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,14 +24,16 @@ class OptimizedChunkRAG:
         Initialize with articles and create chunks.
         
         Optimizations:
-        1. Uses numpy .npz format (10x faster than JSON)
-        2. Batch embedding generation
-        3. Memory-efficient vector operations
-        4. Incremental updates only
+        1. Redis cache as primary embedding store (shared, TTL-managed)
+        2. NumPy .npz file as secondary fallback
+        3. Batch embedding generation for cache misses
+        4. Memory-efficient vector operations
+        5. Incremental updates only
         """
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.chunker = ArticleChunker(chunk_size=500, overlap=100)
         self.embeddings_file = embeddings_file
+        self.embedding_cache = EmbeddingCache()
         
         # Chunk all articles
         print("📦 Chunking articles...")
@@ -38,63 +46,100 @@ class OptimizedChunkRAG:
         self._load_or_create_embeddings()
     
     def _load_or_create_embeddings(self):
-        """Load existing embeddings (numpy) and create only for new chunks"""
+        """
+        Three-tier embedding lookup:
+          1. Redis cache  (fast, shared, TTL-managed)
+          2. NumPy .npz file  (local fallback)
+          3. OpenAI API  (only for true cache misses)
+
+        New embeddings are written to both Redis and the npz file so either
+        path works independently on the next startup.
+        """
         if not self.client.api_key:
             print("⚠️  No OpenAI key, skipping embeddings")
             return
-        
-        npz_file = f"{self.embeddings_file}.npz"
-        
-        # Load existing embeddings if available
-        existing_embeddings = {}
-        if os.path.exists(npz_file):
-            data = np.load(npz_file, allow_pickle=True)
-            chunk_ids = data['chunk_ids'].tolist()
-            embeddings_array = data['embeddings']
-            
-            for i, chunk_id in enumerate(chunk_ids):
-                existing_embeddings[chunk_id] = embeddings_array[i]
-        else:
-            pass
-        
-        # Build chunk_id_map and identify new chunks
-        new_chunks = []
-        all_embeddings_list = []
-        
-        for i, chunk in enumerate(self.chunks):
-            chunk_id = chunk['chunk_id']
+
+        chunk_ids = [chunk['chunk_id'] for chunk in self.chunks]
+
+        # Build chunk_id → index map
+        for i, chunk_id in enumerate(chunk_ids):
             self.chunk_id_map[chunk_id] = i
-            
-            if chunk_id in existing_embeddings:
-                # Use cached embedding
-                all_embeddings_list.append(existing_embeddings[chunk_id])
-            else:
-                # Mark for generation
-                new_chunks.append((i, chunk))
-                all_embeddings_list.append(None)  # Placeholder
+
+        # ------------------------------------------------------------------
+        # Stage 1: Redis cache (batch fetch)
+        # ------------------------------------------------------------------
+        resolved: Dict[str, np.ndarray] = {}
+
+        if self.embedding_cache.available:
+            resolved = self.embedding_cache.batch_get_chunks(chunk_ids)
+            if resolved:
+                print(f"⚡ Redis cache hit: {len(resolved)}/{len(chunk_ids)} chunks")
         
-        # Generate embeddings for new chunks
-        if new_chunks:
-            new_embeddings = self._generate_embeddings_batch([c[1] for c in new_chunks])
-            
-            # Insert new embeddings at correct positions
-            for (idx, chunk), embedding in zip(new_chunks, new_embeddings):
-                all_embeddings_list[idx] = embedding
-            
-            # Save all embeddings to numpy file
-            chunk_ids_array = np.array([chunk['chunk_id'] for chunk in self.chunks])
-            embeddings_array = np.array(all_embeddings_list, dtype=np.float32)
-            
-            np.savez_compressed(
-                npz_file,
-                chunk_ids=chunk_ids_array,
-                embeddings=embeddings_array
-            )
+        missing_after_redis = [cid for cid in chunk_ids if cid not in resolved]
+
+        # ------------------------------------------------------------------
+        # Stage 2: NumPy .npz file (for any Redis misses)
+        # ------------------------------------------------------------------
+        npz_file = f"{self.embeddings_file}.npz"
+        npz_embeddings: Dict[str, np.ndarray] = {}
+
+        if missing_after_redis and os.path.exists(npz_file):
+            data = np.load(npz_file, allow_pickle=True)
+            npz_ids = data['chunk_ids'].tolist()
+            npz_array = data['embeddings']
+            npz_index = {cid: npz_array[i] for i, cid in enumerate(npz_ids)}
+
+            for cid in missing_after_redis:
+                if cid in npz_index:
+                    npz_embeddings[cid] = npz_index[cid]
+
+            if npz_embeddings:
+                print(f"📚 npz file hit: {len(npz_embeddings)}/{len(missing_after_redis)} remaining chunks")
+                # Back-fill Redis with the npz data so future startups skip the file
+                if self.embedding_cache.available:
+                    self.embedding_cache.batch_set_chunks(npz_embeddings)
+
+        resolved.update(npz_embeddings)
+        missing_after_npz = [
+            (i, self.chunks[self.chunk_id_map[cid]])
+            for cid in chunk_ids
+            if cid not in resolved
+            for i in [self.chunk_id_map[cid]]
+        ]
+
+        # ------------------------------------------------------------------
+        # Stage 3: OpenAI API (only true cache misses)
+        # ------------------------------------------------------------------
+        newly_generated: Dict[str, np.ndarray] = {}
+
+        if missing_after_npz:
+            print(f"🔄 Generating embeddings for {len(missing_after_npz)} new chunks...")
+            new_embeddings = self._generate_embeddings_batch([c[1] for c in missing_after_npz])
+
+            for (_, chunk), embedding in zip(missing_after_npz, new_embeddings):
+                newly_generated[chunk['chunk_id']] = embedding
+
+            # Persist to Redis
+            if self.embedding_cache.available:
+                self.embedding_cache.batch_set_chunks(newly_generated)
+                print(f"⚡ Cached {len(newly_generated)} new embeddings in Redis")
+
+            # Persist to npz (merge with everything resolved so far)
+            resolved.update(newly_generated)
+            all_ids = np.array(chunk_ids)
+            all_embs = np.array([resolved[cid] for cid in chunk_ids], dtype=np.float32)
+            np.savez_compressed(npz_file, chunk_ids=all_ids, embeddings=all_embs)
+            print(f"💾 Saved {len(chunk_ids)} embeddings to {npz_file} (compressed)")
         else:
-            pass
-        
-        # Convert to numpy array for fast vector operations
-        self.chunk_embeddings = np.array(all_embeddings_list, dtype=np.float32)
+            print("✅ All chunks already have embeddings")
+
+        # ------------------------------------------------------------------
+        # Build the in-memory numpy matrix for fast similarity search
+        # ------------------------------------------------------------------
+        self.chunk_embeddings = np.array(
+            [resolved[cid] for cid in chunk_ids], dtype=np.float32
+        )
+        print(f"✅ Ready with {len(self.chunk_embeddings)} chunk embeddings")
     
     def _generate_embeddings_batch(self, chunks: List[Dict]) -> List[np.ndarray]:
         """Generate embeddings for a batch of chunks"""
@@ -122,17 +167,24 @@ class OptimizedChunkRAG:
         """
         Ultra-fast vector search using numpy dot product.
         ~100x faster than Python loops for 1000+ chunks.
+
+        Query embeddings are cached in Redis (24h TTL) to avoid redundant
+        API calls for repeated or near-identical questions.
         """
         if self.chunk_embeddings is None or len(self.chunk_embeddings) == 0:
             return self.chunks[:top_k]
-        
-        # Embed query (only 1 API call)
-        query_embedding = self.client.embeddings.create(
-            model="text-embedding-3-small",
-            input=query
-        ).data[0].embedding
-        
-        query_vector = np.array(query_embedding, dtype=np.float32)
+
+        # Check Redis cache for this query's embedding first
+        query_vector = self.embedding_cache.get_query(query)
+
+        if query_vector is None:
+            # Cache miss - call OpenAI and store result
+            raw = self.client.embeddings.create(
+                model="text-embedding-3-small",
+                input=query
+            ).data[0].embedding
+            query_vector = np.array(raw, dtype=np.float32)
+            self.embedding_cache.set_query(query, query_vector)
         
         # Vectorized similarity computation (MUCH faster than loops)
         # Uses numpy's optimized C implementation
@@ -189,13 +241,15 @@ class OptimizedChunkRAG:
         
         unique_articles = len(set((c['source'], c['title']) for c in self.chunks))
         
-        return {
+        stats: Dict = {
             "chunks_created": len(self.chunks),
             "articles_indexed": unique_articles,
             "sources": len(sources),
             "by_source": sources,
-            "embeddings_ready": self.chunk_embeddings is not None and len(self.chunk_embeddings) > 0
+            "embeddings_ready": self.chunk_embeddings is not None and len(self.chunk_embeddings) > 0,
+            "embedding_cache": self.embedding_cache.stats(),
         }
+        return stats
     
     # Keep all other methods from original ChunkRAG
     def get_diverse_chunks(self, chunks: List[Dict], max_chunks: int = 10) -> List[Dict]:
@@ -405,7 +459,7 @@ Generate a natural news-style response based ONLY on what's in the chunks above.
             response_format={"type": "json_object"}
         )
         
-        return json.loads(response.choices[0].message.content)
+        return json.loads(response.choices[0].message.content or "{}")
     
     def search_relevant_chunks(self, question: str, top_k: int = 20) -> Dict:
         """
