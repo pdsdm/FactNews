@@ -19,8 +19,16 @@ Create a `.env` file in this directory. Add keys only for the providers you want
 # Required for RAG completions (currently active)
 CRUSOE_API_KEY=your_key_here
 
-# Optional - enable additional providers
+# Required for default embeddings (OpenAI)
 OPENAI_API_KEY=your_key_here
+
+# Redis URL for fast embedding cache
+REDIS_URL=redis://localhost:6379
+
+# Model Council Providers (comma separated list of providers for the ask endpoint to deliberate over)
+COUNCIL_PROVIDERS=openai,deepseek,anthropic
+
+# Optional - enable additional providers
 ANTHROPIC_API_KEY=your_key_here
 DEEPSEEK_API_KEY=your_key_here
 GOOGLE_API_KEY=your_key_here
@@ -31,42 +39,32 @@ ZAI_API_KEY=your_key_here
 > Embeddings require a provider that supports them. Currently `openai` and `google` do.
 > The default RAG setup uses `crusoe` for completions and `openai` for embeddings.
 
-## Run
+## Architecture Highlights
 
-```bash
-source env/bin/activate
-python app.py
-```
-
-API: http://100.98.98.88:8000  
-Docs: http://100.98.98.88:8000/docs
-
-## Architecture
+1. **Optimized Chunk-level RAG**: 
+   - A multi-tiered embedding cache handles rapid lookups (Redis -> local `.npz` file -> OpenAI API). 
+   - Fast numpy vector operations allow instantaneous similarity searches without needing a heavy Vector DB setup for < 1M chunks.
+   - Cross-process concurrency is safely managed using `filelock` to avoid corruption when writing to `.npz` files.
+2. **Model Council**: 
+   - The `/ask` endpoint uses a `ModelCouncil` to concurrently deliberate over retrieved facts.
+   - Multiple LLMs process the retrieved RAG chunks in parallel. A "judge" LLM then evaluates the responses, extracts agreement/disagreement points, and synthesizes a final structured JSON answer.
+3. **Graceful Fallbacks**:
+   - The app runs fine even if Redis is unavailable, cleanly degrading to the local `npz` cache.
+   - If one Model Council provider fails or rate-limits, the deliberation process seamlessly continues with the successful models.
 
 ```
 backend/
   app.py              # FastAPI routes
-  rag.py              # SimpleRAG - article search + LLM answer generation
-  clustering.py       # Article grouping by story + bias detection
+  rag_optimized.py    # Optimized ChunkRAG with multi-tier cache & filelock
+  embedding_cache.py  # Redis embedding store
+  chunker.py          # News chunking logic
   rss_ingester.py     # RSS feed ingestion
-  scraper.py          # Full article scraping
   news.json           # Cached articles
 
   inference/                         # Multi-provider LLM layer
     __init__.py                      # get_provider, list_providers, ModelCouncil
-    base.py                          # InferenceProvider (ABC) + CompletionResponse
-    config.py                        # Provider URLs, env keys, default models
-    factory.py                       # get_provider("name") with instance cache
     council.py                       # ModelCouncil: N models + 1 LLM judge
-    providers/
-      _openai_compat.py              # Shared OpenAI-compatible base class
-      openai_provider.py             # OpenAI (GPT-4o, GPT-4o-mini)
-      crusoe.py                      # Crusoe Cloud (Qwen3-235B)
-      deepseek.py                    # DeepSeek
-      google.py                      # Google Gemini
-      anthropic.py                   # Anthropic Claude
-      grok.py                        # xAI Grok
-      zai.py                         # Z AI (placeholder)
+    providers/                       # Provider integrations (OpenAI, DeepSeek, etc.)
 ```
 
 ## Inference System

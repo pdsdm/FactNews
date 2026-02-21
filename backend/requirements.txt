@@ -12,3 +12,4 @@ newspaper3k>=0.2.8
 trafilatura>=1.6.0
 scikit-learn>=1.3.0
 redis>=5.0.0
+filelock>=3.12.0
