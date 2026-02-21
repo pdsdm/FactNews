@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "title": "Nueva regulación de IA en la UE entra en vigor",
+    "source": "El País",
+    "url": "https://elpais.com/tecnologia/2026/ia-regulacion",
+    "date": "2026-02-20",
+    "content": "La Unión Europea ha implementado hoy una nueva regulación sobre inteligencia artificial que obliga a las empresas tecnológicas a ser transparentes sobre el uso de datos. La normativa afecta especialmente a modelos de lenguaje y sistemas de reconocimiento facial. Las multas por incumplimiento pueden alcanzar el 6% de la facturación anual global."
+  },
+  {
+    "id": 2,
+    "title": "EU AI Regulation Takes Effect Today",
+    "source": "BBC News",
+    "url": "https://bbc.com/news/technology/eu-ai-law",
+    "date": "2026-02-20",
+    "content": "The European Union's landmark AI regulation came into force today, requiring tech companies to disclose training data sources. The law particularly targets large language models and facial recognition systems. Companies face fines of up to 6% of global annual revenue for violations."
+  },
+  {
+    "id": 3,
+    "title": "Nueva Ley IA: Empresas tech deben revelar datos de entrenamiento",
+    "source": "La Vanguardia",
+    "url": "https://lavanguardia.com/tecnologia/nueva-ley-ia",
+    "date": "2026-02-20",
+    "content": "Las grandes tecnológicas deberán revelar qué datos utilizan para entrenar sus sistemas de inteligencia artificial según la nueva ley europea. OpenAI, Google y Meta tendrán 90 días para cumplir. Expertos consideran que esto podría ralentizar la innovación pero mejorar la transparencia."
+  },
+  {
+    "id": 4,
+    "title": "Climate Summit 2026: Leaders Commit to Carbon Neutrality by 2035",
+    "source": "Reuters",
+    "url": "https://reuters.com/world/climate-summit-2026",
+    "date": "2026-02-19",
+    "content": "World leaders at the Climate Summit 2026 have pledged to achieve carbon neutrality by 2035, five years earlier than previous targets. The agreement includes binding commitments from G20 nations and a $500 billion green technology fund. Environmental groups cautiously welcomed the announcement."
+  },
+  {
+    "id": 5,
+    "title": "Cumbre Climática: Compromiso de neutralidad de carbono para 2035",
+    "source": "El Mundo",
+    "url": "https://elmundo.es/ciencia/cumbre-clima-2026",
+    "date": "2026-02-19",
+    "content": "Los líderes mundiales se comprometen a alcanzar la neutralidad de carbono en 2035, cinco años antes de lo previsto. El acuerdo incluye un fondo de 500.000 millones de dólares para tecnología verde. China y Estados Unidos lideran la iniciativa, aunque organizaciones ecologistas piden medidas más ambiciosas."
+  },
+  {
+    "id": 6,
+    "title": "Tech Giants Report Record Profits in Q4 2025",
+    "source": "Financial Times",
+    "url": "https://ft.com/content/tech-earnings-q4",
+    "date": "2026-02-18",
+    "content": "Apple, Microsoft, and Google parent Alphabet reported record quarterly earnings driven by AI product demand. Microsoft's AI-powered services grew 45% year-over-year. However, increased regulatory scrutiny and compliance costs are expected to impact margins in 2026."
+  },
+  {
+    "id": 7,
+    "title": "Gigantes tecnológicos baten récords de beneficios en Q4 2025",
+    "source": "Expansión",
+    "url": "https://expansion.com/empresas/tecnologia/beneficios-q4",
+    "date": "2026-02-18",
+    "content": "Apple, Microsoft y Alphabet reportaron beneficios récord impulsados por la demanda de productos de IA. Los servicios de IA de Microsoft crecieron un 45% interanual. Sin embargo, los costes de cumplimiento regulatorio podrían afectar los márgenes este año."
+  },
+  {
+    "id": 8,
+    "title": "Breakthrough in Quantum Computing: 1000-Qubit Processor Achieved",
+    "source": "Nature",
+    "url": "https://nature.com/articles/quantum-breakthrough-2026",
+    "date": "2026-02-17",
+    "content": "Researchers at MIT have successfully demonstrated a stable 1000-qubit quantum processor, a significant milestone in quantum computing. The breakthrough could accelerate drug discovery and cryptography applications. The team used a novel error-correction technique that maintains quantum coherence for over 100 milliseconds."
+  },
+  {
+    "id": 9,
+    "title": "Avance en computación cuántica: procesador de 1000 qubits estable",
+    "source": "ABC Ciencia",
+    "url": "https://abc.es/ciencia/computacion-cuantica-mit",
+    "date": "2026-02-17",
+    "content": "Investigadores del MIT han logrado un procesador cuántico de 1000 qubits estable, un hito histórico. Este avance podría revolucionar el descubrimiento de fármacos y la criptografía. El equipo empleó una técnica de corrección de errores que mantiene la coherencia cuántica durante más de 100 milisegundos."
+  },
+  {
+    "id": 10,
+    "title": "Global Chip Shortage Eases as New Factories Come Online",
+    "source": "Bloomberg",
+    "url": "https://bloomberg.com/news/chip-shortage-eases",
+    "date": "2026-02-16",
+    "content": "The global semiconductor shortage is finally easing as new fabrication plants in Arizona, Texas, and Germany begin production. Intel and TSMC's joint ventures are expected to produce 5 million wafers annually by 2027. Industry analysts predict prices will stabilize by mid-2026."
+  }
+]

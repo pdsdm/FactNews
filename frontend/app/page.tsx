@@ -12,6 +12,7 @@ interface ConsensusResponse {
   answer: string;
   facts: Fact[];
   consensus_score: number;
+  articles_used?: number;
 }
 
 export default function Home() {
@@ -159,8 +160,8 @@ export default function Home() {
         {/* Info FASE */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
           <p className="text-sm text-blue-800">
-            🚀 <strong>FASE 1 - MVP</strong> | Backend funcionando con datos de
-            ejemplo. Próximo paso: conectar LLMs reales y RSS feeds.
+            🚀 <strong>FASE 2 - RAG + LLM Real</strong> | OpenAI GPT-4 analizando 10 artículos reales con embeddings.
+            {response && response.articles_used && <span className="ml-2">📊 Usados: {response.articles_used} artículos</span>}
           </p>
         </div>
       </div>
