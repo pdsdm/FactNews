@@ -8,6 +8,13 @@ Improvements over MVP:
 - Structured logging and metrics
 - Rate limiting
 """
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="'asyncio.iscoroutinefunction' is deprecated",
+    category=DeprecationWarning,
+)
+
 import os
 import json
 import time
