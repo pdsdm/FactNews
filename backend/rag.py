@@ -79,18 +79,19 @@ class SimpleRAG:
     def generate_answer(self, query: str, context_articles: List[Dict]) -> Dict:
         """Generate FACT-BASED answer using GPT-4 with context"""
         
-        # Build context from articles
-        context = "\n\n".join([
-            f"[{art['source']} - {art['date']}]\nTítulo: {art['title']}\nContenido: {art['content'][:1500]}\nURL: {art['url']}"
-            for art in context_articles
+        # Build context from articles - CLEARLY SHOW MULTIPLE SOURCES
+        context = "\n\n" + "="*80 + "\n\n".join([
+            f"SOURCE {i+1}: {art['source']} ({art['date']})\n" + "="*80 + f"\nTitle: {art['title']}\nContent: {art['content'][:2000]}\nURL: {art['url']}"
+            for i, art in enumerate(context_articles)
         ])
         
         system_prompt = """You are an investigative journalist specializing in fact-checking.
 
 YOUR MISSION:
 - Generate a FACT-BASED article (NO opinions, NO speculation)
-- Every claim MUST be backed by at least one source
-- Identify CONSENSUS (what multiple sources say) vs DIVERGENCES (what only one says)
+- CRITICALLY IMPORTANT: You MUST use information from MULTIPLE different sources
+- Every fact MUST cite ALL sources that mention it (not just one)
+- Identify CONSENSUS (what 2+ sources confirm) vs DIVERGENCES (only 1 source)
 - Detect BIASES by comparing how different outlets report the same fact
 
 RESPONSE FORMAT (JSON):
@@ -100,40 +101,69 @@ RESPONSE FORMAT (JSON):
   "facts": [
     {
       "claim": "Specific and verifiable fact",
-      "sources": ["URL1", "URL2"],
-      "source_names": ["Source1", "Source2"],
+      "sources": ["URL1", "URL2", "URL3"],
+      "source_names": ["Source1", "Source2", "Source3"],
       "evidence": "Direct quote or concrete data",
       "confidence": "high/medium/low",
-      "consensus": true/false
+      "consensus": true  // TRUE if 2+ sources, FALSE if only 1
     }
   ],
   "divergences": [
     {
       "topic": "Aspect where sources differ",
       "versions": [
-        {"source": "X", "claim": "...", "url": "..."}
+        {"source": "Wired", "claim": "...", "url": "..."},
+        {"source": "NYT", "claim": "...", "url": "..."}
       ]
     }
   ],
-  "bias_analysis": "Brief analysis of detected biases (if any)",
+  "bias_analysis": "Brief analysis comparing how different sources frame this story",
   "consensus_score": 0.0-1.0,
   "coverage_quality": "high/medium/low"
 }
 
-RULES:
-1. Only include verifiable facts in 'facts'
-2. Contradictions go in 'divergences'
-3. 'consensus': true if 2+ sources confirm the fact
-4. 'confidence' based on: number of sources, evidence quality, consistency
-5. NO speculation or interpretation beyond what sources say
-6. If something is unclear, mark it as 'low confidence'"""
+CRITICAL RULES:
+1. You have articles from DIFFERENT sources - USE THEM ALL
+2. For each fact, CHECK if other sources mention it too
+3. If 2+ sources mention a fact → "consensus": true + list ALL sources
+4. If only 1 source mentions it → "consensus": false + note in divergences
+5. ALWAYS include 'divergences' showing where sources disagree
+6. COMPARE how different outlets frame the story (bias_analysis)
+7. NO speculation beyond what sources explicitly state
+
+Example of GOOD output:
+{
+  "facts": [
+    {
+      "claim": "Supreme Court blocked tariffs",
+      "sources": ["url1", "url2", "url3"],
+      "source_names": ["Wired", "NYT", "Ars Technica"],
+      "consensus": true  // ← 3 sources confirm this
+    }
+  ],
+  "divergences": [
+    {
+      "topic": "Trump's response timeline",
+      "versions": [
+        {"source": "Wired", "claim": "New 10% tariff", "url": "..."},
+        {"source": "NYT", "claim": "Raised to 15%", "url": "..."}
+      ]
+    }
+  ]
+}"""
         
         user_prompt = f"""User question: {query}
+
+You have {len(context_articles)} articles from DIFFERENT news sources below.
+IMPORTANT: Cross-reference them to find what multiple sources agree on.
 
 Reference articles:
 {context}
 
-Generate a fact-based article from these sources."""
+Generate a consensus fact-based article that:
+1. Identifies facts confirmed by MULTIPLE sources (consensus: true)
+2. Notes facts from only ONE source (consensus: false, add to divergences)
+3. Compares how different sources frame this story (bias_analysis)"""
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",

@@ -125,21 +125,31 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
         )
     
     try:
-        # 1. Search relevant articles (get more for clustering)
-        relevant_articles = rag.search(request.question, top_k=10)
+        # 1. Search relevant articles - GET MORE from DIVERSE sources
+        all_relevant = rag.search(request.question, top_k=15)
         
-        if not relevant_articles:
+        if not all_relevant:
             raise HTTPException(status_code=404, detail="No relevant articles found")
         
-        # 2. Cluster similar articles (same story from different sources)
-        clusters = clusterer.get_story_clusters(relevant_articles)
+        # 2. Ensure diversity: get articles from different sources
+        seen_sources = set()
+        diverse_articles = []
+        for art in all_relevant:
+            if art['source'] not in seen_sources or len(diverse_articles) < 8:
+                diverse_articles.append(art)
+                seen_sources.add(art['source'])
+            if len(diverse_articles) >= 8:  # Use 8 articles from different sources
+                break
         
-        # 3. Use top cluster (most sources covering same story)
-        main_cluster = clusters[0] if clusters else {"articles": relevant_articles}
-        articles_to_analyze = main_cluster.get("articles", relevant_articles)[:5]
+        # If we have less than 8, use what we have
+        if len(diverse_articles) < 8:
+            diverse_articles = all_relevant[:8]
         
-        # 4. Generate consensus article with LLM
-        llm_response = rag.generate_answer(request.question, articles_to_analyze)
+        # 3. Cluster to understand the story landscape
+        clusters = clusterer.get_story_clusters(diverse_articles)
+        
+        # 4. Generate consensus article with LLM using DIVERSE sources
+        llm_response = rag.generate_answer(request.question, diverse_articles)
         
         # 5. Format response
         facts = [
@@ -171,7 +181,7 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
             bias_analysis=llm_response.get("bias_analysis"),
             consensus_score=llm_response.get("consensus_score", 0.5),
             coverage_quality=llm_response.get("coverage_quality"),
-            articles_used=len(articles_to_analyze),
+            articles_used=len(diverse_articles),
             clusters_found=len(clusters)
         )
     
