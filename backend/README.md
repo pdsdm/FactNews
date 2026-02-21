@@ -38,8 +38,8 @@ source env/bin/activate
 python app.py
 ```
 
-API: http://localhost:8000  
-Docs: http://localhost:8000/docs
+API: http://100.98.98.88:8000  
+Docs: http://100.98.98.88:8000/docs
 
 ## Architecture
 

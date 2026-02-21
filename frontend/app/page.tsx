@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Search, RefreshCw, TrendingUp, CheckCircle2, AlertCircle, ChevronRight, ExternalLink, BarChart3, Shield } from 'lucide-react';
 
+const API = process.env.NEXT_PUBLIC_API_URL || "http://100.98.98.88:8000";
+
 interface Fact {
   claim: string;
   sources: string[];
@@ -40,6 +42,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStats();
@@ -47,24 +50,28 @@ export default function Home() {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('http://localhost:8000/stats');
+      const res = await fetch(`${API}/stats`);
+      if (!res.ok) throw new Error(`Stats error: ${res.status}`);
       const data = await res.json();
       setStats(data);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
+    } catch (err) {
+      console.error('Error fetching stats:', err);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch('http://localhost:8000/refresh-news', {
+      const res = await fetch(`${API}/refresh-news`, {
         method: 'POST'
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+      alert(`News updated!\n${data.total_articles} articles from ${data.sources} sources`);
       await fetchStats();
-    } catch (error) {
-      console.error('Error refreshing news:', error);
+    } catch (err) {
+      console.error('Error refreshing news:', err);
+      alert(`Error updating news: ${err instanceof Error ? err.message : err}`);
     } finally {
       setRefreshing(false);
     }
@@ -76,8 +83,10 @@ export default function Home() {
 
     setLoading(true);
     setResponse(null);
+    setError(null);
+
     try {
-      const res = await fetch('http://localhost:8000/ask', {
+      const res = await fetch(`${API}/ask`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,9 +95,11 @@ export default function Home() {
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
       setResponse(data);
-    } catch (error) {
-      console.error('Error:', error);
+    } catch (err) {
+      console.error('Error:', err);
+      setError(err instanceof Error ? err.message : "Error connecting to backend.");
     } finally {
       setLoading(false);
     }
@@ -198,6 +209,15 @@ export default function Home() {
         </form>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="max-w-5xl mx-auto px-6 mt-6">
+          <div className="bg-red-50 border border-red-300 text-red-800 rounded-lg p-4">
+            <strong>Error:</strong> {error}
+          </div>
+        </div>
+      )}
+
       {/* Results */}
       {response && (
         <div className="max-w-5xl mx-auto px-6 py-12">
@@ -260,6 +280,14 @@ export default function Home() {
             </div>
           )}
 
+          {/* Answer fallback */}
+          {response.answer && !response.headline && (
+            <div className="bg-white rounded-2xl p-8 mb-6 border border-slate-200 shadow-sm">
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">Answer</h3>
+              <p className="text-slate-700 leading-relaxed whitespace-pre-line">{response.answer}</p>
+            </div>
+          )}
+
           {/* Verified Facts */}
           <div className="mb-8">
             <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
@@ -277,6 +305,10 @@ export default function Home() {
                       <p className="text-slate-900 font-medium mb-3 leading-relaxed">
                         {fact.claim}
                       </p>
+
+                      {fact.evidence && (
+                        <p className="text-sm italic text-slate-500 mb-3">&ldquo;{fact.evidence}&rdquo;</p>
+                      )}
                       
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         {fact.source_names && fact.source_names.length > 0 ? (
@@ -316,6 +348,11 @@ export default function Home() {
                           <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
                             <CheckCircle2 className="w-3 h-3" />
                             CONSENSUS
+                          </span>
+                        )}
+                        {fact.consensus === false && (
+                          <span className="inline-flex items-center px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium border border-orange-200">
+                            Single source
                           </span>
                         )}
                       </div>
