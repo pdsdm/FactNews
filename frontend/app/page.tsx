@@ -62,6 +62,7 @@ export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamStatus, setStreamStatus] = useState<string>("");
 
   useEffect(() => {
     fetchStats();
@@ -101,9 +102,10 @@ export default function Home() {
     setLoading(true);
     setResponse(null);
     setError(null);
+    setStreamStatus("Initializing...");
 
     try {
-      const res = await fetch(`${API}/ask`, {
+      const res = await fetch(`${API}/ask/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -111,17 +113,57 @@ export default function Home() {
         body: JSON.stringify({ question }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
 
-      setResponse(data);
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.status === "searching") {
+              setStreamStatus(data.message);
+            } else if (data.status === "analyzing") {
+              setStreamStatus(data.message);
+            } else if (data.status === "generating") {
+              setStreamStatus(data.message);
+            } else if (data.status === "complete") {
+              setResponse(data);
+              setStreamStatus("");
+              setLoading(false);
+            } else if (data.status === "error") {
+              throw new Error(data.message);
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error("Error:", err);
       setError(
         err instanceof Error ? err.message : "Error connecting to backend.",
       );
+      setStreamStatus("");
     } finally {
       setLoading(false);
+      setStreamStatus("");
     }
   };
 
@@ -232,6 +274,24 @@ export default function Home() {
             </button>
           </div>
         </form>
+
+        {/* Streaming Status */}
+        {streamStatus && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+                <div className="absolute inset-0 bg-blue-400 blur-sm opacity-50 animate-pulse"></div>
+              </div>
+              <div className="flex-1">
+                <p className="text-blue-900 font-medium">{streamStatus}</p>
+                <div className="mt-2 h-1 bg-blue-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 animate-progress"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error banner */}
