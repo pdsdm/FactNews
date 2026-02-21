@@ -260,7 +260,7 @@ RESPONSE FORMAT (JSON):
       "claim": "Fact EXACTLY as stated in chunk",
       "sources": ["URL from chunk"],
       "source_names": ["Source name from chunk header"],
-      "date": "Date from chunk (YYYY-MM-DD format)",
+      "date": "YYYY-MM-DD - MANDATORY: Copy from 'DATE:' line in chunk header",
       "evidence": "EXACT quote from chunk - copy/paste verbatim",
       "confidence": "high only if multiple chunks say exact same thing",
       "consensus": true/false  // true ONLY if 2+ chunks explicitly state this
@@ -305,12 +305,19 @@ FACT EXAMPLES:
   Fact: "Trump announced new tariffs following previous trade disputes"
   → NO! "following previous trade disputes" is NOT in chunk
 
-✅ CORRECT:
-  Chunk (dated 2026-02-21): "Trump announced a 10% tariff on imports"
-  Fact: "Trump announced a 10% tariff on imports"
-  Date: "2026-02-21"
-  Evidence: "Trump announced a 10% tariff on imports"
-  → YES! Exact text from chunk + date
+✅ CORRECT - With DATE from chunk header:
+  CHUNK HEADER shows:
+    SOURCE 1: BBC News - Trump announces tariffs
+    DATE: 2026-02-21
+  CHUNK TEXT: "Trump announced a 10% tariff on imports"
+  
+  YOUR RESPONSE MUST BE:
+  {{
+    "claim": "Trump announced a 10% tariff on imports",
+    "date": "2026-02-21",
+    "evidence": "Trump announced a 10% tariff on imports"
+  }}
+  → YES! Date copied from "DATE: 2026-02-21" line
 
 IF CHUNKS ARE OFF-TOPIC:
 {{
@@ -347,13 +354,28 @@ CRITICAL INSTRUCTIONS:
 2. If chunks ARE relevant:
    - Write a NATURAL NEWS HEADLINE (not "Based on chunks...")
    - Write a CLEAR SUMMARY as if reporting news (not "The chunks say...")
+   - For EACH fact, you MUST include the "date" field with the date shown in the chunk header (in YYYY-MM-DD format)
    - Extract facts with dates from the chunks
    - Include exact quotes as evidence
+
+MANDATORY DATE REQUIREMENT:
+Each chunk header shows:
+  SOURCE X: [name] - [title]
+  DATE: 2026-02-21    <--- COPY THIS DATE
+
+When you create a fact from that chunk, your JSON MUST include:
+{{
+  "claim": "...",
+  "date": "2026-02-21",    <--- EXACT COPY from chunk's DATE line
+  "evidence": "..."
+}}
+
+EXAMPLE - If chunk header shows "DATE: 2025-01-15", your fact JSON MUST have "date": "2025-01-15"
 
 Reference chunks:
 {context}
 
-Generate a natural news-style response based ONLY on what's in the chunks above."""
+Generate a natural news-style response based ONLY on what's in the chunks above. DO NOT FORGET THE DATE FIELD FOR EACH FACT!"""
 
         # Call LLM (much faster now - only ~3-5k tokens instead of 16k)
         response = self.client.chat.completions.create(
