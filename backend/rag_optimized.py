@@ -253,13 +253,14 @@ ABSOLUTE CONSTRAINTS:
 
 RESPONSE FORMAT (JSON):
 {{
-  "headline": "Based ONLY on chunks (or 'No Relevant Information Found' if chunks are off-topic)",
-  "summary": "What the chunks say (or 'These sources discuss [actual topics], not [asked topic]')",
+  "headline": "Natural news headline summarizing the main story (or 'No Relevant Information Found' if off-topic)",
+  "summary": "Clear 2-3 sentence summary of the main facts and developments. Write as a news summary, not meta-commentary about sources.",
   "facts": [
     {{
       "claim": "Fact EXACTLY as stated in chunk",
       "sources": ["URL from chunk"],
       "source_names": ["Source name from chunk header"],
+      "date": "Date from chunk (YYYY-MM-DD format)",
       "evidence": "EXACT quote from chunk - copy/paste verbatim",
       "confidence": "high only if multiple chunks say exact same thing",
       "consensus": true/false  // true ONLY if 2+ chunks explicitly state this
@@ -273,33 +274,48 @@ RESPONSE FORMAT (JSON):
       ]
     }}
   ],
-  "bias_analysis": "ONLY if chunks frame same fact differently (or 'N/A')",
+  "bias_analysis": "Required analysis of how different sources frame the topic. Identify:
+    - Which sources use more emotional/neutral language
+    - Different emphasis or focus points
+    - Omitted details in some sources
+    - Political/ideological framing differences
+    If all sources are neutral and identical: 'All sources report factually with minimal bias'",
   "consensus_score": 0.0-1.0,
   "coverage_quality": "low/medium/high based on chunk relevance"
 }}
 
 CRITICAL EXAMPLES:
 
+HEADLINE & SUMMARY EXAMPLES:
+
+❌ WRONG - Meta-commentary:
+  Headline: "Based ONLY on chunks about Trump"
+  Summary: "The chunks provide information about tariffs"
+  → NO! Don't mention chunks or sources
+
+✅ CORRECT - Natural news style:
+  Headline: "Trump Announces 15% Global Tariffs, Criticizes Supreme Court"
+  Summary: "President Trump increased tariffs to 15% on all imports and criticized Supreme Court justices who ruled against his trade policies. Multiple sources confirm the tariff increase takes effect immediately."
+  → YES! Sounds like actual news
+
+FACT EXAMPLES:
+
 ❌ WRONG - Adding context:
   Chunk: "Trump announced new tariffs"
   Fact: "Trump announced new tariffs following previous trade disputes"
   → NO! "following previous trade disputes" is NOT in chunk
 
-❌ WRONG - General knowledge:
-  Chunk: "Supreme Court ruled"
-  Fact: "The Supreme Court, which is the highest court in the US, ruled"
-  → NO! Don't add "highest court" info
-
 ✅ CORRECT:
-  Chunk: "Trump announced a 10% tariff on imports"
+  Chunk (dated 2026-02-21): "Trump announced a 10% tariff on imports"
   Fact: "Trump announced a 10% tariff on imports"
+  Date: "2026-02-21"
   Evidence: "Trump announced a 10% tariff on imports"
-  → YES! Exact text from chunk
+  → YES! Exact text from chunk + date
 
 IF CHUNKS ARE OFF-TOPIC:
 {{
   "headline": "No Relevant Information Found",
-  "summary": "The provided sources discuss [list actual topics in chunks], but do not contain information about [user question]",
+  "summary": "The available sources do not contain information about this topic.",
   "facts": [],
   "coverage_quality": "low"
 }}
@@ -314,6 +330,7 @@ Remember: You ONLY know what's in the {{num_chunks}} chunks below. Nothing else 
             
             context_parts.append(
                 f"SOURCE {i+1}: {chunk['source']} - {chunk['title']}\n"
+                f"DATE: {chunk.get('date', 'Unknown')}\n"
                 f"{'='*80}\n"
                 f"{chunk_with_context}\n"
                 f"URL: {chunk['url']}"
@@ -323,20 +340,20 @@ Remember: You ONLY know what's in the {{num_chunks}} chunks below. Nothing else 
         
         user_prompt = f"""User question: {query}
 
-You have {len(chunks)} chunks from news sources below.
+You have {len(chunks)} news chunks below with dates.
 
-CRITICAL: Read each chunk carefully. If NONE of them are relevant to the user's question, respond with:
-- headline: "No Relevant Information Found"
-- summary: "The available sources do not contain information about this topic."
-- facts: []
-- coverage_quality: "low"
-
-Only if chunks ARE relevant, extract facts that are EXPLICITLY stated.
+CRITICAL INSTRUCTIONS:
+1. If chunks are NOT relevant: Return "No Relevant Information Found"
+2. If chunks ARE relevant:
+   - Write a NATURAL NEWS HEADLINE (not "Based on chunks...")
+   - Write a CLEAR SUMMARY as if reporting news (not "The chunks say...")
+   - Extract facts with dates from the chunks
+   - Include exact quotes as evidence
 
 Reference chunks:
 {context}
 
-Generate a response based ONLY on what's in the chunks above. Include the evidence field with EXACT quotes."""
+Generate a natural news-style response based ONLY on what's in the chunks above."""
 
         # Call LLM (much faster now - only ~3-5k tokens instead of 16k)
         response = self.client.chat.completions.create(
@@ -350,6 +367,20 @@ Generate a response based ONLY on what's in the chunks above. Include the eviden
         )
         
         return json.loads(response.choices[0].message.content)
+    
+    def search_relevant_chunks(self, question: str, top_k: int = 20) -> Dict:
+        """
+        Quick search - returns raw chunks without AI processing.
+        Ultra-fast for initial display.
+        """
+        relevant_chunks = self.search_chunks(question, top_k=top_k)
+        diverse_chunks = self.get_diverse_chunks(relevant_chunks, max_chunks=10)
+        
+        return {
+            "chunks": diverse_chunks,
+            "sources_analyzed": len(set(c['source'] for c in diverse_chunks)),
+            "chunks_used": len(diverse_chunks)
+        }
     
     def ask(self, question: str) -> Dict:
         """

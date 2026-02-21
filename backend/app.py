@@ -100,6 +100,32 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error refreshing news: {str(e)}")
 
+@app.post("/ask/search")
+def search_chunks_only(request: QuestionRequest):
+    """Fast search - returns relevant chunks without AI processing"""
+    try:
+        result = chunk_rag.search_relevant_chunks(request.question, top_k=20)
+        
+        # Format chunks for preview
+        preview_facts = []
+        for chunk in result['chunks']:
+            preview_facts.append({
+                "source": chunk['source'],
+                "title": chunk['title'],
+                "url": chunk['url'],
+                "preview": chunk['text'][:200] + "...",
+                "similarity": chunk.get('similarity_score', 0)
+            })
+        
+        return {
+            "sources_analyzed": result['sources_analyzed'],
+            "chunks_found": result['chunks_used'],
+            "preview_facts": preview_facts,
+            "status": "searching"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/ask")
 def ask_question(request: QuestionRequest) -> ConsensusResponse:
     """Generate consensus article from multiple sources using CHUNK-LEVEL RAG"""
