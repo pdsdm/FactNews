@@ -90,21 +90,29 @@ class ArticleClusterer:
         return clusters
 
 
-def detect_bias_in_cluster(cluster: Dict, llm_client) -> Dict:
+def detect_bias_in_cluster(cluster: Dict, provider=None) -> Dict:
     """
-    Use LLM to detect how different sources cover the same story
+    Use LLM to detect how different sources cover the same story.
+
+    Args:
+        cluster: A cluster dict with 'articles' key.
+        provider: An InferenceProvider instance (or None to use default).
     """
+    if provider is None:
+        from inference import get_provider
+        provider = get_provider("crusoe")
+
     articles = cluster['articles']
-    
+
     if len(articles) < 2:
         return {"bias_detected": False, "coverage": "single_source"}
-    
+
     # Build prompt to detect bias
     context = "\n\n".join([
         f"[{art['source']}]\nTitle: {art['title']}\nContent: {art['content'][:800]}"
         for art in articles[:5]  # Max 5 sources
     ])
-    
+
     prompt = f"""Analyze how different media outlets report the same story. Identify:
 
 1. COMMON FACTS (agreed upon by all sources)
@@ -123,21 +131,19 @@ Respond in JSON:
   "bias_analysis": "Brief explanation of detected biases",
   "consensus_level": 0.0-1.0
 }}"""
-    
+
     try:
-        response = llm_client.chat.completions.create(
-            model="gpt-4o-mini",
+        import json
+        response = provider.complete(
             messages=[
                 {"role": "system", "content": "You are an expert in media analysis and journalistic bias detection."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.2,
-            response_format={"type": "json_object"}
+            json_mode=True,
         )
-        
-        import json
-        return json.loads(response.choices[0].message.content)
-    
+        return json.loads(response.content)
+
     except Exception as e:
         print(f"Error in bias detection: {e}")
         return {"bias_detected": False, "error": str(e)}
