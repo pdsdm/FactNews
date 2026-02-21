@@ -22,9 +22,9 @@ class ArticleChunker:
         Returns list of chunks:
         [
             {
-                'chunk_id': 'article_0_chunk_0',
+                'chunk_id': 'article_hash_chunk_0',
                 'text': 'paragraph text...',
-                'article_id': 0,
+                'article_id': 'article_hash',
                 'chunk_index': 0,
                 'source': 'BBC News',
                 'url': 'https://...',
@@ -34,6 +34,10 @@ class ArticleChunker:
         ]
         """
         content = article['content']
+        
+        import hashlib
+        unique_string = article.get('url') or article.get('title') or str(id(article))
+        article_id = hashlib.md5(unique_string.encode('utf-8')).hexdigest()[:12]
         
         # Try paragraph splitting first
         paragraphs = [p.strip() for p in content.split('\n\n') if p.strip()]
@@ -67,6 +71,7 @@ class ArticleChunker:
                 chunks.append(self._create_chunk(
                     text=current_chunk,
                     article=article,
+                    article_id=article_id,
                     chunk_index=chunk_index
                 ))
                 chunk_index += 1
@@ -85,14 +90,14 @@ class ArticleChunker:
             chunks.append(self._create_chunk(
                 text=current_chunk,
                 article=article,
+                article_id=article_id,
                 chunk_index=chunk_index
             ))
         
         return chunks
     
-    def _create_chunk(self, text: str, article: Dict, chunk_index: int) -> Dict:
+    def _create_chunk(self, text: str, article: Dict, article_id: str, chunk_index: int) -> Dict:
         """Create chunk metadata"""
-        article_id = id(article)  # Unique ID for this article
         
         return {
             'chunk_id': f"{article_id}_chunk_{chunk_index}",

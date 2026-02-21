@@ -68,6 +68,7 @@ class ModelCouncil:
         system: str | None = None,
         temperature: float = 0.7,
         judge_temperature: float = 0.2,
+        judge_system_prompt: str | None = None,
     ) -> dict:
         """
         Send prompt to all council providers, then have the judge evaluate.
@@ -128,19 +129,29 @@ class ModelCouncil:
 
         # -- Phase 3: judge evaluates ---------------------------------------
         judge = get_provider(self.judge_name)
+        active_judge_prompt = judge_system_prompt or JUDGE_SYSTEM_PROMPT
         judge_response = judge.complete(
             [
-                {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
+                {"role": "system", "content": active_judge_prompt},
                 {"role": "user", "content": judge_prompt},
             ],
             temperature=judge_temperature,
             json_mode=True,
         )
 
+        clean_content = judge_response.content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
         try:
-            judgment = json.loads(judge_response.content)
+            judgment = json.loads(clean_content)
         except json.JSONDecodeError:
-            judgment = {"synthesis": judge_response.content, "parse_error": True}
+            judgment = {"synthesis": clean_content, "parse_error": True}
 
         return {
             "responses": responses,

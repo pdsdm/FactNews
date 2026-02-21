@@ -14,6 +14,8 @@ from openai import OpenAI
 from typing import List, Dict, Optional
 from chunker import ArticleChunker
 from embedding_cache import EmbeddingCache
+from inference.council import ModelCouncil
+from filelock import FileLock
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -34,6 +36,12 @@ class OptimizedChunkRAG:
         self.chunker = ArticleChunker(chunk_size=500, overlap=100)
         self.embeddings_file = embeddings_file
         self.embedding_cache = EmbeddingCache()
+        
+        # Initialize Model Council
+        # Default to OpenAI only if others aren't provided
+        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai")
+        providers = [p.strip() for p in providers_env.split(",")]
+        self.council = ModelCouncil(providers=providers, judge="openai")
         
         # Chunk all articles
         print("📦 Chunking articles...")
@@ -84,9 +92,11 @@ class OptimizedChunkRAG:
         npz_embeddings: Dict[str, np.ndarray] = {}
 
         if missing_after_redis and os.path.exists(npz_file):
-            data = np.load(npz_file, allow_pickle=True)
-            npz_ids = data['chunk_ids'].tolist()
-            npz_array = data['embeddings']
+            with FileLock(f"{npz_file}.lock"):
+                data = np.load(npz_file, allow_pickle=True)
+                npz_ids = data['chunk_ids'].tolist()
+                npz_array = data['embeddings']
+            
             npz_index = {cid: npz_array[i] for i, cid in enumerate(npz_ids)}
 
             for cid in missing_after_redis:
@@ -128,7 +138,8 @@ class OptimizedChunkRAG:
             resolved.update(newly_generated)
             all_ids = np.array(chunk_ids)
             all_embs = np.array([resolved[cid] for cid in chunk_ids], dtype=np.float32)
-            np.savez_compressed(npz_file, chunk_ids=all_ids, embeddings=all_embs)
+            with FileLock(f"{npz_file}.lock"):
+                np.savez_compressed(npz_file, chunk_ids=all_ids, embeddings=all_embs)
             print(f"💾 Saved {len(chunk_ids)} embeddings to {npz_file} (compressed)")
         else:
             print("✅ All chunks already have embeddings")
@@ -209,28 +220,29 @@ class OptimizedChunkRAG:
         if not os.path.exists(npz_file):
             return
         
-        data = np.load(npz_file, allow_pickle=True)
-        old_chunk_ids = set(data['chunk_ids'].tolist())
-        current_chunk_ids = {chunk['chunk_id'] for chunk in self.chunks}
-        
-        obsolete_ids = old_chunk_ids - current_chunk_ids
-        
-        if obsolete_ids:
-            print(f"🧹 Removing {len(obsolete_ids)} obsolete embeddings")
+        with FileLock(f"{npz_file}.lock"):
+            data = np.load(npz_file, allow_pickle=True)
+            old_chunk_ids = set(data['chunk_ids'].tolist())
+            current_chunk_ids = {chunk['chunk_id'] for chunk in self.chunks}
             
-            # Keep only current chunks
-            keep_indices = [i for i, cid in enumerate(data['chunk_ids']) 
-                          if cid in current_chunk_ids]
+            obsolete_ids = old_chunk_ids - current_chunk_ids
             
-            new_chunk_ids = data['chunk_ids'][keep_indices]
-            new_embeddings = data['embeddings'][keep_indices]
-            
-            np.savez_compressed(
-                npz_file,
-                chunk_ids=new_chunk_ids,
-                embeddings=new_embeddings
-            )
-            print(f"✅ Cleaned embeddings saved")
+            if obsolete_ids:
+                print(f"🧹 Removing {len(obsolete_ids)} obsolete embeddings")
+                
+                # Keep only current chunks
+                keep_indices = [i for i, cid in enumerate(data['chunk_ids']) 
+                              if cid in current_chunk_ids]
+                
+                new_chunk_ids = data['chunk_ids'][keep_indices]
+                new_embeddings = data['embeddings'][keep_indices]
+                
+                np.savez_compressed(
+                    npz_file,
+                    chunk_ids=new_chunk_ids,
+                    embeddings=new_embeddings
+                )
+                print(f"✅ Cleaned embeddings saved")
     
     def get_stats(self) -> Dict:
         """Get RAG statistics"""
@@ -448,18 +460,49 @@ Reference chunks:
 
 Generate a natural news-style response based ONLY on what's in the chunks above. DO NOT FORGET THE DATE FIELD FOR EACH FACT!"""
 
-        # Call LLM (much faster now - only ~3-5k tokens instead of 16k)
-        response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
+        judge_system_prompt = """You are an impartial judge evaluating JSON responses from multiple AI models extracting facts from news chunks.
+Your task is to synthesize the BEST possible final JSON response by combining the strongest, most accurate facts that models agree on, and correctly formatting it.
+        
+You MUST respond with a raw JSON object matching this EXACT schema:
+{
+  "headline": "Natural news headline summarizing the main story (or 'No Relevant Information Found' if off-topic)",
+  "summary": "Clear 2-3 sentence summary of the main facts and developments.",
+  "facts": [
+    {
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "date": "YYYY-MM-DD",
+      "evidence": "EXACT quote from chunk - copy/paste verbatim",
+      "confidence": "high/medium/low",
+      "consensus": true/false
+    }
+  ],
+  "divergences": [
+    {
+      "topic": "What they disagree on",
+      "versions": [
+        {"source": "X", "claim": "EXACT quote from chunk", "url": "..."}
+      ]
+    }
+  ],
+  "bias_analysis": "Required analysis of how different sources frame the topic.",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "low/medium/high based on chunk relevance"
+}
+
+Ensure all facts include the mandatory 'date' field from their respective chunks."""
+
+        # Call the Model Council (deliberate handles querying providers and judge synthesis)
+        council_result = self.council.deliberate(
+            prompt=user_prompt,
+            system=system_prompt,
             temperature=0.3,
-            response_format={"type": "json_object"}
+            judge_temperature=0.2,
+            judge_system_prompt=judge_system_prompt
         )
         
-        return json.loads(response.choices[0].message.content or "{}")
+        return council_result.get("judgment", {})
     
     def search_relevant_chunks(self, question: str, top_k: int = 20) -> Dict:
         """
