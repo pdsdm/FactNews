@@ -85,55 +85,55 @@ class SimpleRAG:
             for art in context_articles
         ])
         
-        system_prompt = """Eres un periodista de investigación especializado en verificación de hechos.
+        system_prompt = """You are an investigative journalist specializing in fact-checking.
 
-TU MISIÓN:
-- Generar un artículo BASADO EN HECHOS (NO opiniones, NO especulación)
-- Cada afirmación DEBE estar respaldada por al menos una fuente
-- Identifica CONSENSO (qué dicen múltiples fuentes) vs DIVERGENCIAS (qué solo dice una)
-- Detecta SESGOS comparando cómo diferentes medios reportan el mismo hecho
+YOUR MISSION:
+- Generate a FACT-BASED article (NO opinions, NO speculation)
+- Every claim MUST be backed by at least one source
+- Identify CONSENSUS (what multiple sources say) vs DIVERGENCES (what only one says)
+- Detect BIASES by comparing how different outlets report the same fact
 
-FORMATO DE RESPUESTA (JSON):
+RESPONSE FORMAT (JSON):
 {
-  "headline": "Titular claro y factual",
-  "summary": "Resumen de 2-3 líneas con los hechos principales",
+  "headline": "Clear and factual headline",
+  "summary": "2-3 line summary of main facts",
   "facts": [
     {
-      "claim": "Hecho específico y verificable",
+      "claim": "Specific and verifiable fact",
       "sources": ["URL1", "URL2"],
       "source_names": ["Source1", "Source2"],
-      "evidence": "Cita textual o dato concreto",
+      "evidence": "Direct quote or concrete data",
       "confidence": "high/medium/low",
       "consensus": true/false
     }
   ],
   "divergences": [
     {
-      "topic": "Aspecto en el que difieren las fuentes",
+      "topic": "Aspect where sources differ",
       "versions": [
         {"source": "X", "claim": "...", "url": "..."}
       ]
     }
   ],
-  "bias_analysis": "Breve análisis de sesgos detectados (si los hay)",
+  "bias_analysis": "Brief analysis of detected biases (if any)",
   "consensus_score": 0.0-1.0,
   "coverage_quality": "high/medium/low"
 }
 
-REGLAS:
-1. Solo incluye hechos verificables en 'facts'
-2. Si hay contradicciones, van en 'divergences'
-3. 'consensus': true si 2+ fuentes confirman el hecho
-4. 'confidence' basada en: número de fuentes, calidad de evidencia, consistencia
-5. NO especules ni interpretes más allá de lo que dicen las fuentes
-6. Si algo no está claro, márcalo como 'low confidence'"""
+RULES:
+1. Only include verifiable facts in 'facts'
+2. Contradictions go in 'divergences'
+3. 'consensus': true if 2+ sources confirm the fact
+4. 'confidence' based on: number of sources, evidence quality, consistency
+5. NO speculation or interpretation beyond what sources say
+6. If something is unclear, mark it as 'low confidence'"""
         
-        user_prompt = f"""Pregunta del usuario: {query}
+        user_prompt = f"""User question: {query}
 
-Artículos de referencia:
+Reference articles:
 {context}
 
-Genera un artículo basado en hechos verificables extraídos de estos artículos."""
+Generate a fact-based article from these sources."""
         
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",

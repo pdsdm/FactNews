@@ -7,21 +7,23 @@ from bs4 import BeautifulSoup
 import re
 from scraper import enrich_article_content
 
-# RSS Feeds de medios principales
+# RSS Feeds - Top 10 English News Sources
 RSS_FEEDS = {
-    # Español
-    "El País": "https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada",
-    "El Mundo": "https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml",
-    "BBC Mundo": "https://feeds.bbci.co.uk/mundo/rss.xml",
-    "CNN Español": "http://cnnespanol.cnn.com/feed/",
-    
-    # English
-    "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
-    "Reuters": "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best",
-    "The Guardian": "https://www.theguardian.com/world/rss",
+    # Top US News
     "CNN": "http://rss.cnn.com/rss/edition.rss",
+    "BBC News": "http://feeds.bbci.co.uk/news/rss.xml",
+    "The New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+    "The Guardian": "https://www.theguardian.com/world/rss",
+    "Reuters": "https://www.reutersagency.com/feed/?taxonomy=best-topics&post_type=best",
+    
+    # Tech & Business
     "TechCrunch": "https://techcrunch.com/feed/",
+    "The Wall Street Journal": "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
+    "Bloomberg": "https://www.bloomberg.com/feed/podcast/business.xml",
+    
+    # Tech & Science
     "Wired": "https://www.wired.com/feed/rss",
+    "Ars Technica": "https://feeds.arstechnica.com/arstechnica/index",
 }
 
 class RSSIngester:

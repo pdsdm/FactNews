@@ -107,7 +107,7 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
         
         return {
             "success": True,
-            "message": "Noticias actualizadas con scraping completo",
+            "message": "News updated with full scraping",
             **stats
         }
     

@@ -105,22 +105,22 @@ def detect_bias_in_cluster(cluster: Dict, llm_client) -> Dict:
         for art in articles[:5]  # Max 5 sources
     ])
     
-    prompt = f"""Analiza cómo diferentes medios reportan la misma noticia. Identifica:
+    prompt = f"""Analyze how different media outlets report the same story. Identify:
 
-1. HECHOS COMUNES (acordados por todas las fuentes)
-2. DIFERENCIAS DE ENFOQUE (qué aspectos enfatiza cada medio)
-3. POSIBLES SESGOS (tono, lenguaje emocional, información omitida)
+1. COMMON FACTS (agreed upon by all sources)
+2. DIFFERENCES IN FOCUS (what aspects each outlet emphasizes)
+3. POSSIBLE BIASES (tone, emotional language, omitted information)
 
-Noticias:
+News articles:
 {context}
 
-Responde en JSON:
+Respond in JSON:
 {{
   "common_facts": ["fact1", "fact2", ...],
   "divergences": [
     {{"source": "X", "emphasis": "...", "tone": "neutral/positive/negative"}}
   ],
-  "bias_analysis": "Explicación breve de sesgos detectados",
+  "bias_analysis": "Brief explanation of detected biases",
   "consensus_level": 0.0-1.0
 }}"""
     
@@ -128,7 +128,7 @@ Responde en JSON:
         response = llm_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "Eres un experto en análisis de medios y detección de sesgos periodísticos."},
+                {"role": "system", "content": "You are an expert in media analysis and journalistic bias detection."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2,

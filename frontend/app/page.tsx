@@ -54,12 +54,12 @@ export default function Home() {
       });
       const data = await res.json();
       alert(
-        `Noticias actualizadas!\n${data.total_articles} artículos de ${data.sources} fuentes`,
+        `News updated!\n${data.total_articles} articles de ${data.sources} sources`,
       );
       fetchStats();
     } catch (error) {
       console.error("Error:", error);
-      alert("Error actualizando noticias");
+      alert("Error updating news");
     } finally {
       setRefreshing(false);
     }
@@ -109,21 +109,21 @@ export default function Home() {
           Consensus Newsroom
         </h1>
         <p className="text-center text-gray-600 mb-4">
-          Pregunta cualquier cosa y obtén respuestas verificadas por múltiples
-          fuentes
+          Ask anything and get answers verified by multiple
+          sources
         </p>
 
         {/* Stats bar */}
         <div className="flex justify-center gap-4 mb-8">
           <div className="bg-white px-4 py-2 rounded-lg shadow text-sm">
-            {stats?.total_articles || 0} artículos
+            {stats?.total_articles || 0} articles
           </div>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
             className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-2 rounded-lg shadow text-sm font-medium disabled:opacity-50 transition"
           >
-            {refreshing ? "Actualizando..." : "Actualizar Noticias"}
+            {refreshing ? "Updating..." : "Refresh News"}
           </button>
         </div>
 
@@ -135,7 +135,7 @@ export default function Home() {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-              placeholder="¿Qué quieres saber sobre las noticias actuales?"
+              placeholder="What do you want to know about current news?"
               className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
@@ -143,7 +143,7 @@ export default function Home() {
               disabled={loading || !question.trim()}
               className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
             >
-              {loading ? "Buscando..." : "Preguntar"}
+              {loading ? "Searching..." : "Ask"}
             </button>
           </div>
         </div>
@@ -158,7 +158,7 @@ export default function Home() {
               </h2>
               <p className="text-gray-700 text-lg">{response.answer}</p>
               <div className="mt-4 flex items-center gap-2">
-                <span className="text-sm text-gray-600">Consenso:</span>
+                <span className="text-sm text-gray-600">Consensus:</span>
                 <div className="flex-1 bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-indigo-600 h-2 rounded-full"
@@ -174,7 +174,7 @@ export default function Home() {
             {/* Hechos verificados */}
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-2xl font-semibold mb-4 text-gray-800">
-                Hechos Verificados
+                Verified Facts
               </h2>
               <div className="space-y-4">
                 {response.facts.map((fact, index) => (
@@ -207,10 +207,10 @@ export default function Home() {
                         }`}
                       >
                         {fact.confidence === "high"
-                          ? "Alta confianza"
+                          ? "High confidence"
                           : fact.confidence === "medium"
-                            ? "Media confianza"
-                            : "Baja confianza"}
+                            ? "Medium confidence"
+                            : "Low confidence"}
                       </span>
                     </div>
                   </div>
@@ -226,7 +226,7 @@ export default function Home() {
             🚀 <strong>FASE 3.5 - Full Scraping + Clustering + Bias Detection</strong> | 
             Artículos completos scrapeados + detección de sesgos + conexión entre noticias.
             {response && response.clusters_found && response.clusters_found > 1 && (
-              <span className="ml-2">🔗 {response.clusters_found} historias relacionadas</span>
+              <span className="ml-2">🔗 {response.clusters_found} related stories</span>
             )}
           </p>
         </div>
