@@ -1,10 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from rag_v2 import ChunkRAG  # New chunk-level RAG
+from rag_v2 import ChunkRAG
 from rss_ingester import ingest_news
-from clustering import ArticleClusterer, detect_bias_in_cluster
-from inference import list_providers, get_provider
 import os
 import json
 
@@ -57,12 +55,9 @@ class ConsensusResponse(BaseModel):
 def read_root():
     stats = chunk_rag.get_stats()
     return {
-        "status": "Consensus Newsroom API running",
-        "phase": "FASE 4 - Multi-Provider Inference + Model Council",
-        "articles_loaded": len(rag.articles),
-        "embeddings_ready": len(rag.embeddings) > 0,
-        "inference_provider": rag.provider.name,
-        "available_providers": list_providers(),
+        "status": "Consensus Newsroom API - CHUNK-LEVEL RAG",
+        "phase": "FASE 4 - Fast Chunk-based Retrieval",
+        **stats
     }
 
 @app.get("/stats")
@@ -70,27 +65,12 @@ def get_stats():
     """Get system statistics"""
     stats = chunk_rag.get_stats()
     return {
-        "total_articles": len(rag.articles),
-        "fully_scraped": scraped_count,
-        "embeddings_created": len(rag.embeddings),
-        "inference_provider": rag.provider.name,
-        "embed_provider": rag.embed_provider.name,
-        "available_providers": list_providers(),
+        "articles_indexed": stats['total_articles'],
+        "chunks_created": stats['total_chunks'],
+        "sources": stats['total_sources'],
+        "embeddings_ready": stats['embeddings_ready'],
+        "avg_chunks_per_article": stats['avg_chunks_per_article']
     }
-
-@app.post("/create-embeddings")
-async def create_embeddings():
-    """Force creation of embeddings for all articles"""
-    try:
-        rag.create_embeddings()
-        return {
-            "success": True,
-            "message": f"Created embeddings for {len(rag.embeddings)} articles",
-            "embed_provider": rag.embed_provider.name,
-            "total_articles": len(rag.articles)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating embeddings: {str(e)}")
 
 @app.post("/refresh-news")
 async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, days_back: int = 4):
@@ -105,14 +85,8 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
         with open("news.json", 'r', encoding='utf-8') as f:
             articles = json.load(f)
         
-        # Recreate embeddings
-        rag.embeddings = []
-        try:
-            print(f"Creating embeddings via {rag.embed_provider.name}...")
-            rag.create_embeddings()
-            print(f"Created {len(rag.embeddings)} embeddings")
-        except Exception as e:
-            print(f"Could not create embeddings: {e}")
+        print("🔄 Re-initializing Chunk RAG with new articles...")
+        chunk_rag = ChunkRAG(articles)
         
         return {
             "success": True,
@@ -126,11 +100,18 @@ async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, d
 
 @app.post("/ask")
 def ask_question(request: QuestionRequest) -> ConsensusResponse:
-    """Generate consensus article from multiple sources"""
+    """Generate consensus article from multiple sources using CHUNK-LEVEL RAG"""
+    
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=500, 
+            detail="OpenAI API key not configured. Add OPENAI_API_KEY to .env file"
+        )
     
     try:
-        # 1. Search relevant articles - GET MORE from DIVERSE sources
-        all_relevant = rag.search(request.question, top_k=15)
+        # 1. Search for relevant CHUNKS (not full articles) - FAST
+        print(f"🔍 Searching chunks for: {request.question}")
+        relevant_chunks = chunk_rag.search_chunks(request.question, top_k=30)
         
         if not relevant_chunks:
             raise HTTPException(status_code=404, detail="No relevant content found")
