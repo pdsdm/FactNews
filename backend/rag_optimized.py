@@ -54,10 +54,8 @@ class OptimizedChunkRAG:
             
             for i, chunk_id in enumerate(chunk_ids):
                 existing_embeddings[chunk_id] = embeddings_array[i]
-            
-            print(f"📚 Loaded {len(existing_embeddings)} existing embeddings from numpy")
         else:
-            print("📝 No existing embeddings found")
+            pass
         
         # Build chunk_id_map and identify new chunks
         new_chunks = []
@@ -77,7 +75,6 @@ class OptimizedChunkRAG:
         
         # Generate embeddings for new chunks
         if new_chunks:
-            print(f"🔄 Generating embeddings for {len(new_chunks)} new chunks...")
             new_embeddings = self._generate_embeddings_batch([c[1] for c in new_chunks])
             
             # Insert new embeddings at correct positions
@@ -93,13 +90,11 @@ class OptimizedChunkRAG:
                 chunk_ids=chunk_ids_array,
                 embeddings=embeddings_array
             )
-            print(f"💾 Saved {len(self.chunks)} embeddings to {npz_file} (compressed)")
         else:
-            print("✅ All chunks already have embeddings")
+            pass
         
         # Convert to numpy array for fast vector operations
         self.chunk_embeddings = np.array(all_embeddings_list, dtype=np.float32)
-        print(f"✅ Ready with {len(self.chunk_embeddings)} chunk embeddings")
     
     def _generate_embeddings_batch(self, chunks: List[Dict]) -> List[np.ndarray]:
         """Generate embeddings for a batch of chunks"""
@@ -251,6 +246,12 @@ ABSOLUTE CONSTRAINTS:
 5. If the chunks don't mention something, IT DOES NOT EXIST for you
 6. Every single fact MUST include a VERBATIM quote as evidence
 
+CONSENSUS RULES:
+- A fact has "consensus": true ONLY if 2 or more DIFFERENT chunks/sources state the same fact
+- A fact has "consensus": false if only 1 chunk/source mentions it
+- consensus_score = (number of consensus:true facts) / (total number of facts)
+  Example: 3 consensus facts out of 5 total facts = 0.6 consensus_score
+
 RESPONSE FORMAT (JSON):
 {{
   "headline": "Natural news headline summarizing the main story (or 'No Relevant Information Found' if off-topic)",
@@ -280,7 +281,7 @@ RESPONSE FORMAT (JSON):
     - Omitted details in some sources
     - Political/ideological framing differences
     If all sources are neutral and identical: 'All sources report factually with minimal bias'",
-  "consensus_score": 0.0-1.0,
+  "consensus_score": 0.0-1.0,  // CALCULATION: (number of consensus facts) / (total facts). Example: 3 consensus facts out of 5 total = 0.6
   "coverage_quality": "low/medium/high based on chunk relevance"
 }}
 
@@ -315,9 +316,23 @@ FACT EXAMPLES:
   {{
     "claim": "Trump announced a 10% tariff on imports",
     "date": "2026-02-21",
-    "evidence": "Trump announced a 10% tariff on imports"
+    "evidence": "Trump announced a 10% tariff on imports",
+    "consensus": false  // Only 1 source mentions this
   }}
   → YES! Date copied from "DATE: 2026-02-21" line
+
+✅ CONSENSUS EXAMPLE:
+  SOURCE 1: BBC News says "Trump announced a 10% tariff"
+  SOURCE 2: CNN says "Trump announced a 10% tariff on imports"
+  SOURCE 3: Reuters says "The president announced 10% tariffs"
+  
+  This fact has consensus: true (3 sources confirm it)
+  
+  SOURCE 4: Bloomberg says "Supreme Court struck down the order"
+  
+  This fact has consensus: false (only 1 source mentions it)
+  
+  Result: 1 consensus fact out of 2 total = consensus_score: 0.5
 
 IF CHUNKS ARE OFF-TOPIC:
 {{
@@ -355,6 +370,8 @@ CRITICAL INSTRUCTIONS:
    - Write a NATURAL NEWS HEADLINE (not "Based on chunks...")
    - Write a CLEAR SUMMARY as if reporting news (not "The chunks say...")
    - For EACH fact, you MUST include the "date" field with the date shown in the chunk header (in YYYY-MM-DD format)
+   - For EACH fact, set "consensus" to true if 2+ different sources/chunks mention it, false if only 1 source
+   - Calculate consensus_score as: (number of consensus:true facts) / (total facts)
    - Extract facts with dates from the chunks
    - Include exact quotes as evidence
 

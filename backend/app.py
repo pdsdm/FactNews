@@ -34,6 +34,7 @@ class Fact(BaseModel):
     confidence: str
     evidence: str | None = None
     consensus: bool | None = None
+    date: str | None = None
 
 class Divergence(BaseModel):
     topic: str
@@ -173,7 +174,8 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
                 source_names=fact.get("source_names", []),
                 confidence=fact.get("confidence", "medium"),
                 evidence=fact.get("evidence"),
-                consensus=fact.get("consensus", False)
+                consensus=fact.get("consensus", False),
+                date=fact.get("date")
             )
             for fact in llm_response.get("facts", [])
         ]
