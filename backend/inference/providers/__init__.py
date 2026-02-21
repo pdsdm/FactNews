@@ -5,6 +5,7 @@ from inference.providers.deepseek import DeepSeekProvider
 from inference.providers.google import GoogleProvider
 from inference.providers.anthropic import AnthropicProvider
 from inference.providers.grok import GrokProvider
+from inference.providers.cerebras import CerebrasProvider
 from inference.providers.zai import ZAIProvider
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     "GoogleProvider",
     "AnthropicProvider",
     "GrokProvider",
+    "CerebrasProvider",
     "ZAIProvider",
 ]

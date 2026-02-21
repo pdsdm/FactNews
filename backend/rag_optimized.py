@@ -33,9 +33,9 @@ class OptimizedChunkRAG:
         5. Incremental updates only
         """
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-        self.chunker = ArticleChunker(chunk_size=500, overlap=100)
+        self.chunker = ArticleChunker(chunk_size=300, overlap_sentences=1)
         self.embeddings_file = embeddings_file
-        self.embedding_cache = EmbeddingCache()
+        self.embedding_cache = EmbeddingCache(lru_size=1000)
         
         # Initialize Model Council
         # Default to OpenAI only if others aren't provided
