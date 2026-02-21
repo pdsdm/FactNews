@@ -20,6 +20,7 @@ interface Fact {
   claim: string;
   sources: string[];
   source_names: string[];
+  date?: string;
   confidence: string;
   evidence?: string;
   consensus: boolean;
@@ -61,6 +62,8 @@ export default function Home() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchStatus, setSearchStatus] = useState<string>("");
+  const [previewSources, setPreviewSources] = useState<number>(0);
 
   useEffect(() => {
     fetchStats();
@@ -104,9 +107,12 @@ export default function Home() {
     setLoading(true);
     setResponse(null);
     setError(null);
+    setSearchStatus("Searching for relevant sources...");
+    setPreviewSources(0);
 
     try {
-      const res = await fetch(`${API}/ask`, {
+      // Phase 1: Quick search for chunks (no AI processing)
+      const searchRes = await fetch(`${API}/ask/search`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -114,14 +120,37 @@ export default function Home() {
         body: JSON.stringify({ question }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
-      setResponse(data);
+      const searchData = await searchRes.json();
+      if (!searchRes.ok)
+        throw new Error(searchData.detail || `Error ${searchRes.status}`);
+
+      // Show preview
+      setPreviewSources(searchData.sources_analyzed);
+      setSearchStatus(
+        `Found ${searchData.chunks_found} relevant articles from ${searchData.sources_analyzed} sources. Analyzing with AI...`,
+      );
+
+      // Phase 2: Full AI analysis (slower)
+      const analysisRes = await fetch(`${API}/ask`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question }),
+      });
+
+      const analysisData = await analysisRes.json();
+      if (!analysisRes.ok)
+        throw new Error(analysisData.detail || `Error ${analysisRes.status}`);
+
+      setResponse(analysisData);
+      setSearchStatus("");
     } catch (err) {
       console.error("Error:", err);
       setError(
         err instanceof Error ? err.message : "Error connecting to backend.",
       );
+      setSearchStatus("");
     } finally {
       setLoading(false);
     }
@@ -234,6 +263,23 @@ export default function Home() {
             </button>
           </div>
         </form>
+
+        {/* Search Status Indicator */}
+        {searchStatus && (
+          <div className="mt-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="w-5 h-5 text-blue-600 animate-spin" />
+              <div>
+                <p className="text-blue-900 font-medium">{searchStatus}</p>
+                {previewSources > 0 && (
+                  <p className="text-sm text-blue-700 mt-1">
+                    Analyzing content from {previewSources} sources...
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Error banner */}
@@ -358,6 +404,17 @@ export default function Home() {
                       <p className="text-slate-900 font-medium mb-3 leading-relaxed">
                         {fact.claim}
                       </p>
+
+                      {fact.date && (
+                        <p className="text-xs text-slate-500 mb-2">
+                          📅{" "}
+                          {new Date(fact.date).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}
+                        </p>
+                      )}
 
                       {fact.evidence && (
                         <p className="text-sm italic text-slate-500 mb-3">
