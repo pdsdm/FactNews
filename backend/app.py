@@ -8,13 +8,6 @@ Improvements over MVP:
 - Structured logging and metrics
 - Rate limiting
 """
-import warnings
-warnings.filterwarnings(
-    "ignore",
-    message="'asyncio.iscoroutinefunction' is deprecated",
-    category=DeprecationWarning,
-)
-
 import os
 import json
 import time
@@ -460,10 +453,8 @@ async def ask_question_stream(http_request: Request, request: QuestionRequest):
         try:
             yield f"data: {json.dumps({'status': 'searching', 'message': 'Searching relevant chunks...'})}\n\n"
             
-            loop = asyncio.get_event_loop()
-            relevant_chunks = await loop.run_in_executor(
-                None,
-                lambda: _chunk_rag.search_chunks(request.question, top_k=30),
+            relevant_chunks = await asyncio.to_thread(
+                _chunk_rag.search_chunks, request.question, 30
             )
             
             if not relevant_chunks:
@@ -477,9 +468,8 @@ async def ask_question_stream(http_request: Request, request: QuestionRequest):
             
             yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus...'})}\n\n"
             
-            llm_response = await loop.run_in_executor(
-                None,
-                lambda: _chunk_rag.generate_answer(request.question, diverse_chunks),
+            llm_response = await asyncio.to_thread(
+                _chunk_rag.generate_answer, request.question, diverse_chunks
             )
             
             yield f"data: {json.dumps({'status': 'complete', 'response': llm_response})}\n\n"
