@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from rag import rag
+from rag_v2 import ChunkRAG  # New chunk-level RAG
 from rss_ingester import ingest_news
-from clustering import ArticleClusterer, detect_bias_in_cluster
 import os
+import json
 
 app = FastAPI(title="Consensus Newsroom API")
 
@@ -17,8 +17,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize clusterer
-clusterer = ArticleClusterer(similarity_threshold=0.3)
+# Load articles and initialize chunk-level RAG
+with open("news.json", 'r', encoding='utf-8') as f:
+    articles = json.load(f)
+
+print("🚀 Initializing Chunk-level RAG...")
+chunk_rag = ChunkRAG(articles)
 
 class QuestionRequest(BaseModel):
     question: str
@@ -44,79 +48,59 @@ class ConsensusResponse(BaseModel):
     bias_analysis: str | None = None
     consensus_score: float
     coverage_quality: str | None = None
-    articles_used: int | None = None
-    clusters_found: int | None = None
+    chunks_used: int | None = None
+    sources_analyzed: int | None = None
 
 @app.get("/")
 def read_root():
+    stats = chunk_rag.get_stats()
     return {
-        "status": "Consensus Newsroom API running",
-        "phase": "FASE 3.5 - Full Scraping + Clustering + Bias Detection",
-        "articles_loaded": len(rag.articles),
-        "embeddings_ready": len(rag.embeddings) > 0
+        "status": "Consensus Newsroom API - CHUNK-LEVEL RAG",
+        "phase": "FASE 4 - Fast Chunk-based Retrieval",
+        **stats
     }
 
 @app.get("/stats")
 def get_stats():
     """Get system statistics"""
-    scraped_count = sum(1 for art in rag.articles if art.get('scraped', False))
+    stats = chunk_rag.get_stats()
     return {
-        "total_articles": len(rag.articles),
-        "fully_scraped": scraped_count,
-        "embeddings_created": len(rag.embeddings),
-        "has_openai_key": bool(os.getenv("OPENAI_API_KEY"))
+        "articles_indexed": stats['total_articles'],
+        "chunks_created": stats['total_chunks'],
+        "sources": stats['total_sources'],
+        "embeddings_ready": stats['embeddings_ready'],
+        "avg_chunks_per_article": stats['avg_chunks_per_article']
     }
-
-@app.post("/create-embeddings")
-async def create_embeddings():
-    """Force creation of embeddings for all articles"""
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500,
-            detail="OpenAI API key not configured"
-        )
-    
-    try:
-        rag.create_embeddings()
-        return {
-            "success": True,
-            "message": f"Created embeddings for {len(rag.embeddings)} articles",
-            "total_articles": len(rag.articles)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating embeddings: {str(e)}")
 
 @app.post("/refresh-news")
 async def refresh_news(max_feeds: int | None = None, scrape_full: bool = True, days_back: int = 4):
     """Fetch latest news from RSS feeds with full article scraping"""
+    global chunk_rag
+    
     try:
         # Ingest news with full scraping
         stats = ingest_news(max_feeds=max_feeds, scrape_full=scrape_full, days_back=days_back)
         
-        # Reload articles in RAG
-        import json
+        # Reload articles and re-initialize RAG
         with open("news.json", 'r', encoding='utf-8') as f:
-            rag.articles = json.load(f)
+            articles = json.load(f)
         
-        # Recreate embeddings
-        rag.embeddings = []
-        if os.getenv("OPENAI_API_KEY"):
-            print("🔄 Creating embeddings for new articles...")
-            rag.create_embeddings()
-            print(f"✅ Created {len(rag.embeddings)} embeddings")
+        print("🔄 Re-initializing Chunk RAG with new articles...")
+        chunk_rag = ChunkRAG(articles)
         
         return {
             "success": True,
-            "message": "News updated with full scraping",
-            **stats
+            "message": "News refreshed and re-chunked successfully",
+            "articles_fetched": stats['total_articles'],
+            "sources_used": stats['sources_used'],
+            **chunk_rag.get_stats()
         }
-    
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating news: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error refreshing news: {str(e)}")
 
 @app.post("/ask")
 def ask_question(request: QuestionRequest) -> ConsensusResponse:
-    """Generate consensus article from multiple sources"""
+    """Generate consensus article from multiple sources using CHUNK-LEVEL RAG"""
     
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
@@ -125,33 +109,24 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
         )
     
     try:
-        # 1. Search relevant articles - GET MORE from DIVERSE sources
-        all_relevant = rag.search(request.question, top_k=15)
+        # 1. Search for relevant CHUNKS (not full articles) - FAST
+        print(f"🔍 Searching chunks for: {request.question}")
+        relevant_chunks = chunk_rag.search_chunks(request.question, top_k=30)
         
-        if not all_relevant:
-            raise HTTPException(status_code=404, detail="No relevant articles found")
+        if not relevant_chunks:
+            raise HTTPException(status_code=404, detail="No relevant content found")
         
-        # 2. Ensure diversity: get articles from different sources
-        seen_sources = set()
-        diverse_articles = []
-        for art in all_relevant:
-            if art['source'] not in seen_sources or len(diverse_articles) < 8:
-                diverse_articles.append(art)
-                seen_sources.add(art['source'])
-            if len(diverse_articles) >= 8:  # Use 8 articles from different sources
-                break
+        # 2. Ensure diversity: chunks from different sources/articles
+        print(f"📊 Selecting diverse chunks...")
+        diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=10)
         
-        # If we have less than 8, use what we have
-        if len(diverse_articles) < 8:
-            diverse_articles = all_relevant[:8]
+        print(f"✅ Selected {len(diverse_chunks)} chunks from {len(set(c['source'] for c in diverse_chunks))} sources")
         
-        # 3. Cluster to understand the story landscape
-        clusters = clusterer.get_story_clusters(diverse_articles)
+        # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
+        print(f"🤖 Generating consensus article...")
+        llm_response = chunk_rag.generate_answer(request.question, diverse_chunks)
         
-        # 4. Generate consensus article with LLM using DIVERSE sources
-        llm_response = rag.generate_answer(request.question, diverse_articles)
-        
-        # 5. Format response
+        # 4. Format response
         facts = [
             Fact(
                 claim=fact.get("claim", ""),
@@ -172,6 +147,9 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
             for div in llm_response.get("divergences", [])
         ]
         
+        # Count unique sources
+        unique_sources = len(set(c['source'] for c in diverse_chunks))
+        
         return ConsensusResponse(
             headline=llm_response.get("headline"),
             summary=llm_response.get("summary"),
@@ -181,8 +159,8 @@ def ask_question(request: QuestionRequest) -> ConsensusResponse:
             bias_analysis=llm_response.get("bias_analysis"),
             consensus_score=llm_response.get("consensus_score", 0.5),
             coverage_quality=llm_response.get("coverage_quality"),
-            articles_used=len(diverse_articles),
-            clusters_found=len(clusters)
+            chunks_used=len(diverse_chunks),
+            sources_analyzed=unique_sources
         )
     
     except Exception as e:

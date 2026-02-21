@@ -1,22 +1,27 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect } from 'react';
+import { Search, RefreshCw, TrendingUp, CheckCircle2, AlertCircle, ChevronRight, ExternalLink, BarChart3, Shield } from 'lucide-react';
 
 interface Fact {
   claim: string;
   sources: string[];
-  source_names?: string[];
+  source_names: string[];
   confidence: string;
   evidence?: string;
-  consensus?: boolean;
+  consensus: boolean;
 }
 
 interface Divergence {
   topic: string;
-  versions: Array<{source: string; claim: string; url: string}>;
+  versions: Array<{
+    source: string;
+    claim: string;
+    url: string;
+  }>;
 }
 
-interface ConsensusResponse {
+interface Response {
   headline?: string;
   summary?: string;
   answer?: string;
@@ -25,212 +30,355 @@ interface ConsensusResponse {
   bias_analysis?: string;
   consensus_score: number;
   coverage_quality?: string;
-  articles_used?: number;
-  clusters_found?: number;
+  chunks_used?: number;
+  sources_analyzed?: number;
 }
 
 export default function Home() {
-  const [question, setQuestion] = useState("");
-  const [response, setResponse] = useState<ConsensusResponse | null>(null);
+  const [question, setQuestion] = useState('');
+  const [response, setResponse] = useState<Response | null>(null);
   const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [stats, setStats] = useState<{ total_articles: number } | null>(null);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("http://localhost:8000/stats");
+      const res = await fetch('http://localhost:8000/stats');
       const data = await res.json();
       setStats(data);
     } catch (error) {
-      console.error("Error fetching stats:", error);
+      console.error('Error fetching stats:', error);
     }
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const res = await fetch("http://localhost:8000/refresh-news", {
-        method: "POST",
+      const res = await fetch('http://localhost:8000/refresh-news', {
+        method: 'POST'
       });
       const data = await res.json();
-      alert(
-        `News updated!\n${data.total_articles} articles de ${data.sources} sources`,
-      );
-      fetchStats();
+      await fetchStats();
     } catch (error) {
-      console.error("Error:", error);
-      alert("Error updating news");
+      console.error('Error refreshing news:', error);
     } finally {
       setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const handleAsk = async () => {
+  const handleAsk = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!question.trim()) return;
 
     setLoading(true);
+    setResponse(null);
     try {
-      const res = await fetch("http://localhost:8000/ask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('http://localhost:8000/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ question }),
       });
+
       const data = await res.json();
       setResponse(data);
     } catch (error) {
-      console.error("Error:", error);
-      alert("Error conectando con el backend. ¿Está corriendo en puerto 8000?");
+      console.error('Error:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const getConfidenceColor = (confidence: string) => {
-    switch (confidence) {
-      case "high":
-        return "bg-green-100 border-green-500 text-green-800";
-      case "medium":
-        return "bg-yellow-100 border-yellow-500 text-yellow-800";
-      case "low":
-        return "bg-red-100 border-red-500 text-red-800";
-      default:
-        return "bg-gray-100 border-gray-500 text-gray-800";
-    }
+  const getConfidenceBadge = (confidence: string) => {
+    const styles = {
+      high: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      medium: 'bg-amber-100 text-amber-700 border-amber-200',
+      low: 'bg-rose-100 text-rose-700 border-rose-200',
+    };
+    return styles[confidence as keyof typeof styles] || styles.medium;
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-5xl font-bold text-center mb-2 text-gray-800">
-          Consensus Newsroom
-        </h1>
-        <p className="text-center text-gray-600 mb-4">
-          Ask anything and get answers verified by multiple
-          sources
-        </p>
-
-        {/* Stats bar */}
-        <div className="flex justify-center gap-4 mb-8">
-          <div className="bg-white px-4 py-2 rounded-lg shadow text-sm">
-            {stats?.total_articles || 0} articles
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
+      {/* Header */}
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  Consensus Newsroom
+                </h1>
+                <p className="text-xs text-slate-500">Multi-source fact verification</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {stats && (
+                <div className="hidden md:flex items-center gap-4 text-sm text-slate-600 bg-slate-100 px-4 py-2 rounded-lg">
+                  <span className="flex items-center gap-1">
+                    <BarChart3 className="w-4 h-4" />
+                    {stats.chunks_created || stats.articles_indexed} chunks
+                  </span>
+                  <span className="text-slate-300">•</span>
+                  <span>{stats.sources} sources</span>
+                </div>
+              )}
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-2 rounded-lg shadow text-sm font-medium disabled:opacity-50 transition"
-          >
-            {refreshing ? "Updating..." : "Refresh News"}
-          </button>
         </div>
+      </header>
 
-        {/* Input */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <div className="flex gap-3">
+      {/* Hero Section */}
+      {!response && (
+        <div className="max-w-4xl mx-auto px-6 pt-24 pb-16 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6">
+            <TrendingUp className="w-4 h-4" />
+            Powered by Chunk-level RAG
+          </div>
+          <h2 className="text-5xl font-bold text-slate-900 mb-6 leading-tight">
+            Verify facts across<br />
+            <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              multiple news sources
+            </span>
+          </h2>
+          <p className="text-xl text-slate-600 mb-12 max-w-2xl mx-auto">
+            Get consensus-based answers backed by evidence from top news outlets. 
+            Detect bias, find truth.
+          </p>
+        </div>
+      )}
+
+      {/* Search Bar */}
+      <div className={`max-w-4xl mx-auto px-6 ${response ? 'pt-8' : ''}`}>
+        <form onSubmit={handleAsk} className="relative">
+          <div className="relative">
+            <Search className="absolute left-6 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-              placeholder="What do you want to know about current news?"
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Ask about any recent news event..."
+              className="w-full pl-14 pr-32 py-5 text-lg border-2 border-slate-200 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-white shadow-sm"
             />
             <button
-              onClick={handleAsk}
+              type="submit"
               disabled={loading || !question.trim()}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-500/30"
             >
-              {loading ? "Searching..." : "Ask"}
+              {loading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Analyzing
+                </>
+              ) : (
+                <>
+                  Search
+                  <ChevronRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
-        </div>
+        </form>
+      </div>
 
-        {/* Response */}
-        {response && (
-          <div className="space-y-6">
-            {/* Respuesta principal */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">
-                Respuesta
-              </h2>
-              <p className="text-gray-700 text-lg">{response.answer}</p>
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-sm text-gray-600">Consensus:</span>
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full"
-                    style={{ width: `${response.consensus_score * 100}%` }}
-                  />
-                </div>
-                <span className="text-sm font-medium text-gray-700">
-                  {Math.round(response.consensus_score * 100)}%
-                </span>
+      {/* Results */}
+      {response && (
+        <div className="max-w-5xl mx-auto px-6 py-12">
+          {/* Metrics Bar */}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-600">Consensus Score</span>
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="text-3xl font-bold text-slate-900">
+                {Math.round(response.consensus_score * 100)}%
+              </div>
+              <div className="mt-3 w-full bg-slate-100 rounded-full h-2">
+                <div 
+                  className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${response.consensus_score * 100}%` }}
+                />
               </div>
             </div>
+            
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-600">Sources Analyzed</span>
+                <BarChart3 className="w-5 h-5 text-blue-500" />
+              </div>
+              <div className="text-3xl font-bold text-slate-900">
+                {response.sources_analyzed || response.chunks_used || 0}
+              </div>
+              <div className="mt-3 text-sm text-slate-500">
+                From top outlets
+              </div>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-600">Coverage Quality</span>
+                <TrendingUp className="w-5 h-5 text-purple-500" />
+              </div>
+              <div className="text-3xl font-bold text-slate-900 capitalize">
+                {response.coverage_quality || 'High'}
+              </div>
+              <div className="mt-3 text-sm text-slate-500">
+                Multi-source verified
+              </div>
+            </div>
+          </div>
 
-            {/* Hechos verificados */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-2xl font-semibold mb-4 text-gray-800">
-                Verified Facts
+          {/* Headline & Summary */}
+          {response.headline && (
+            <div className="bg-white rounded-2xl p-8 mb-6 border border-slate-200 shadow-sm">
+              <h2 className="text-3xl font-bold text-slate-900 mb-4">
+                {response.headline}
               </h2>
-              <div className="space-y-4">
-                {response.facts.map((fact, index) => (
-                  <div
-                    key={index}
-                    className={`border-l-4 p-4 rounded-r-lg ${getConfidenceColor(fact.confidence)}`}
-                  >
-                    <p className="font-medium mb-2">{fact.claim}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {fact.sources.map((source, idx) => (
-                        <a
-                          key={idx}
-                          href={source}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs px-2 py-1 bg-white rounded border border-gray-300 hover:bg-gray-50 transition"
-                        >
-                          Fuente {idx + 1}
-                        </a>
-                      ))}
+              {response.summary && (
+                <p className="text-lg text-slate-600 leading-relaxed">
+                  {response.summary}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Verified Facts */}
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              Verified Facts
+            </h3>
+            <div className="space-y-3">
+              {response.facts.map((fact, idx) => (
+                <div key={idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm">
+                      {idx + 1}
                     </div>
-                    <div className="mt-2">
-                      <span
-                        className={`text-xs font-semibold uppercase px-2 py-1 rounded ${
-                          fact.confidence === "high"
-                            ? "bg-green-200"
-                            : fact.confidence === "medium"
-                              ? "bg-yellow-200"
-                              : "bg-red-200"
-                        }`}
-                      >
-                        {fact.confidence === "high"
-                          ? "High confidence"
-                          : fact.confidence === "medium"
-                            ? "Medium confidence"
-                            : "Low confidence"}
-                      </span>
+                    <div className="flex-1">
+                      <p className="text-slate-900 font-medium mb-3 leading-relaxed">
+                        {fact.claim}
+                      </p>
+                      
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        {fact.source_names && fact.source_names.length > 0 ? (
+                          fact.source_names.map((name, i) => (
+                            <a
+                              key={i}
+                              href={fact.sources[i]}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                            >
+                              {name}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ))
+                        ) : (
+                          fact.sources.map((url, i) => (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-full transition-colors"
+                            >
+                              Source {i + 1}
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          ))
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getConfidenceBadge(fact.confidence)}`}>
+                          {fact.confidence.toUpperCase()} CONFIDENCE
+                        </span>
+                        {fact.consensus && (
+                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-medium border border-emerald-200">
+                            <CheckCircle2 className="w-3 h-3" />
+                            CONSENSUS
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Divergences */}
+          {response.divergences && response.divergences.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <AlertCircle className="w-6 h-6 text-amber-500" />
+                Conflicting Reports
+              </h3>
+              <div className="space-y-4">
+                {response.divergences.map((div, idx) => (
+                  <div key={idx} className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-6 border border-amber-200">
+                    <h4 className="font-semibold text-slate-900 mb-3">{div.topic}</h4>
+                    <div className="space-y-3">
+                      {div.versions.map((version, i) => (
+                        <div key={i} className="bg-white/80 rounded-lg p-4 border border-amber-100">
+                          <div className="flex items-start gap-3">
+                            <span className="px-2 py-1 bg-amber-200 text-amber-800 text-xs font-bold rounded">
+                              {version.source}
+                            </span>
+                            <p className="flex-1 text-sm text-slate-700">
+                              {version.claim}
+                            </p>
+                            <a 
+                              href={version.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Info FASE */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-          <p className="text-sm text-blue-800">
-            🚀 <strong>FASE 3.5 - Full Scraping + Clustering + Bias Detection</strong> | 
-            Artículos completos scrapeados + detección de sesgos + conexión entre noticias.
-            {response && response.clusters_found && response.clusters_found > 1 && (
-              <span className="ml-2">🔗 {response.clusters_found} related stories</span>
-            )}
-          </p>
+          {/* Bias Analysis */}
+          {response.bias_analysis && (
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-2xl p-6 border border-purple-200">
+              <h3 className="font-semibold text-slate-900 mb-3 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-600" />
+                Bias Analysis
+              </h3>
+              <p className="text-slate-700 leading-relaxed">
+                {response.bias_analysis}
+              </p>
+            </div>
+          )}
         </div>
-      </div>
-    </main>
+      )}
+    </div>
   );
 }
