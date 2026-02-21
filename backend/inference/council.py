@@ -9,6 +9,7 @@ Usage:
 """
 from __future__ import annotations
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from inference.base import CompletionResponse
 from inference.factory import get_provider
@@ -52,14 +53,19 @@ class ModelCouncil:
         self.judge_name = judge
         self.max_workers = max_workers
 
-    def _query_provider(self, provider_name: str, messages: list[dict], **kwargs) -> tuple[str, CompletionResponse | str]:
-        """Query a single provider, returning (name, response_or_error)."""
+    def _query_provider(self, provider_name: str, messages: list[dict], **kwargs) -> tuple[str, CompletionResponse | str, float]:
+        """Query a single provider, returning (name, response_or_error, time_ms)."""
         try:
+            start = time.time()
             provider = get_provider(provider_name)
             response = provider.complete(messages, **kwargs)
-            return provider_name, response
+            elapsed = (time.time() - start) * 1000
+            print(f"  ⏱️  {provider_name}: {elapsed:.0f}ms")
+            return provider_name, response, elapsed
         except Exception as e:
-            return provider_name, f"ERROR: {e}"
+            elapsed = (time.time() - start) * 1000
+            print(f"  ❌ {provider_name}: FAILED in {elapsed:.0f}ms — {e}")
+            return provider_name, f"ERROR: {e}", elapsed
 
     def deliberate(
         self,
@@ -91,6 +97,10 @@ class ModelCouncil:
         responses: dict[str, str] = {}
         succeeded: list[str] = []
         failed: list[str] = []
+        timings: dict[str, float] = {}
+
+        print(f"\n🏛️  COUNCIL: Querying {len(self.provider_names)} providers in parallel...")
+        phase1_start = time.time()
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {
@@ -98,13 +108,20 @@ class ModelCouncil:
                 for name in self.provider_names
             }
             for future in as_completed(futures):
-                name, result = future.result()
+                name, result, elapsed = future.result()
+                timings[name] = elapsed
                 if isinstance(result, CompletionResponse):
                     responses[name] = result.content
                     succeeded.append(name)
                 else:
                     responses[name] = result  # error string
                     failed.append(name)
+
+        phase1_time = (time.time() - phase1_start) * 1000
+        print(f"  ⏱️  Phase 1 total (parallel): {phase1_time:.0f}ms")
+        print(f"  ✅ Succeeded: {succeeded}")
+        if failed:
+            print(f"  ❌ Failed: {failed}")
 
         if not succeeded:
             return {
@@ -128,6 +145,8 @@ class ModelCouncil:
 {council_text}"""
 
         # -- Phase 3: judge evaluates ---------------------------------------
+        print(f"\n⚖️  JUDGE ({self.judge_name}): Synthesizing responses...")
+        judge_start = time.time()
         judge = get_provider(self.judge_name)
         active_judge_prompt = judge_system_prompt or JUDGE_SYSTEM_PROMPT
         judge_response = judge.complete(
@@ -138,6 +157,9 @@ class ModelCouncil:
             temperature=judge_temperature,
             json_mode=True,
         )
+        judge_time = (time.time() - judge_start) * 1000
+        print(f"  ⏱️  Judge ({self.judge_name}): {judge_time:.0f}ms")
+        timings[f"judge_{self.judge_name}"] = judge_time
 
         clean_content = judge_response.content.strip()
         if clean_content.startswith("```"):
@@ -153,10 +175,17 @@ class ModelCouncil:
         except json.JSONDecodeError:
             judgment = {"synthesis": clean_content, "parse_error": True}
 
+        total_time = phase1_time + judge_time
+        print(f"\n🏛️  COUNCIL TOTAL: {total_time:.0f}ms (providers: {phase1_time:.0f}ms + judge: {judge_time:.0f}ms)")
+        for name, ms in sorted(timings.items(), key=lambda x: x[1]):
+            print(f"     {name}: {ms:.0f}ms")
+        print()
+
         return {
             "responses": responses,
             "judgment": judgment,
             "raw_judgment": judge_response.content,
             "providers_used": succeeded,
             "providers_failed": failed,
+            "timings": timings,
         }

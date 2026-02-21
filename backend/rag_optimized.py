@@ -37,9 +37,8 @@ class OptimizedChunkRAG:
         self.embeddings_file = embeddings_file
         self.embedding_cache = EmbeddingCache(lru_size=1000)
         
-        # Initialize Model Council
-        # Default to OpenAI only if others aren't provided
-        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai")
+        # Initialize Model Council with all available providers
+        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai,crusoe,google,cerebras")
         providers = [p.strip() for p in providers_env.split(",")]
         self.council = ModelCouncil(providers=providers, judge="openai")
         
