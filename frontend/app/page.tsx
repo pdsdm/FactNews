@@ -12,8 +12,9 @@ import {
   BarChart3,
   Shield,
 } from "lucide-react";
+import { basepath } from "./env";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = `http://${basepath}:8000`;
 
 interface Fact {
   claim: string;
