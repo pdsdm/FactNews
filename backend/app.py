@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import redis as redis_client
 
@@ -27,6 +28,9 @@ from rag_optimized import OptimizedChunkRAG
 from rss_ingester import ingest_news
 import os
 import json
+import asyncio
+import time
+from typing import AsyncGenerator, Optional
 
 app = FastAPI(title="Consensus Newsroom API")
 
@@ -258,16 +262,26 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         )
     
     try:
+        request_start = time.time()
+        print(f"\n{'='*80}")
+        print(f"🔍 NEW REQUEST: {request.question}")
+        print(f"{'='*80}")
+        
         # 1. Search for relevant CHUNKS (not full articles) - FAST
-        print(f"🔍 Searching chunks for: {request.question}")
+        search_start = time.time()
         relevant_chunks = chunk_rag.search_chunks(request.question, top_k=30)
+        search_time = time.time() - search_start
+        print(f"⏱️  Chunk search completed in {search_time:.3f}s")
         
         if not relevant_chunks:
             raise HTTPException(status_code=404, detail="No relevant content found")
         
         # 2. Ensure diversity: chunks from different sources/articles
+        diversity_start = time.time()
         print(f"📊 Selecting diverse chunks from {len(set(c['source'] for c in relevant_chunks))} sources...")
         diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
+        diversity_time = time.time() - diversity_start
+        print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
         
         sources_used = {}
         for chunk in diverse_chunks:
@@ -278,8 +292,11 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             diverse_chunks = _chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=20)
         
         # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
-        print(f"🤖 Generating consensus article...")
+        llm_start = time.time()
+        print(f"🤖 Generating consensus article with {len(diverse_chunks)} chunks...")
         llm_response = chunk_rag.generate_answer(request.question, diverse_chunks)
+        llm_time = time.time() - llm_start
+        print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
         
         facts = [
             Fact(
@@ -318,7 +335,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         print(f"   └─ LLM: {llm_time:.3f}s ({llm_time/total_time*100:.1f}%)")
         print(f"{'='*80}\n")
         
-        response = ConsensusResponse(
+        return ConsensusResponse(
             headline=headline,
             summary=summary,
             answer=answer,
@@ -347,6 +364,154 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         _update_metrics(response_time, error=True)
         logger.error(f"Error processing question: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
+
+@app.post("/ask/stream")
+async def ask_question_stream(request: QuestionRequest):
+    """Stream consensus article generation with real-time updates"""
+    
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=500, 
+            detail="OpenAI API key not configured"
+        )
+    
+    async def generate_stream() -> AsyncGenerator[str, None]:
+        try:
+            request_start = time.time()
+            print(f"\n{'='*80}")
+            print(f"🔍 STREAMING REQUEST: {request.question}")
+            print(f"{'='*80}")
+            
+            # Send initial status
+            yield f"data: {json.dumps({'status': 'searching', 'message': 'Searching for relevant sources...'})}\n\n"
+            
+            # 1. Parallel chunk search - run in thread pool to avoid blocking
+            search_start = time.time()
+            loop = asyncio.get_event_loop()
+            relevant_chunks = await loop.run_in_executor(
+                None, 
+                chunk_rag.search_chunks, 
+                request.question, 
+                30
+            )
+            search_time = time.time() - search_start
+            print(f"⏱️  Chunk search completed in {search_time:.3f}s")
+            
+            if not relevant_chunks:
+                yield f"data: {json.dumps({'status': 'error', 'message': 'No relevant content found'})}\n\n"
+                return
+            
+            # Send discovery update
+            sources_count = len(set(c['source'] for c in relevant_chunks))
+            yield f"data: {json.dumps({'status': 'analyzing', 'message': f'Found content from {sources_count} sources. Analyzing...', 'sources': sources_count})}\n\n"
+            
+            # 2. Get diverse chunks - also in parallel
+            diversity_start = time.time()
+            diverse_chunks = await loop.run_in_executor(
+                None,
+                chunk_rag.get_diverse_chunks,
+                relevant_chunks,
+                12
+            )
+            diversity_time = time.time() - diversity_start
+            print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
+            
+            # Send chunks selected update
+            yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus analysis...', 'chunks': len(diverse_chunks)})}\n\n"
+            
+            # 3. Generate answer with streaming
+            llm_start = time.time()
+            llm_response = await loop.run_in_executor(
+                None,
+                chunk_rag.generate_answer,
+                request.question,
+                diverse_chunks
+            )
+            llm_time = time.time() - llm_start
+            print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
+            
+            # Format and send final response
+            facts = [
+                {
+                    "claim": fact.get("claim", ""),
+                    "sources": fact.get("sources", []),
+                    "source_names": fact.get("source_names", []),
+                    "confidence": fact.get("confidence", "medium"),
+                    "evidence": fact.get("evidence"),
+                    "consensus": fact.get("consensus", False),
+                    "date": fact.get("date")
+                }
+                for fact in llm_response.get("facts", [])
+            ]
+            
+            divergences = [
+                {
+                    "topic": div.get("topic", ""),
+                    "versions": div.get("versions", [])
+                }
+                for div in llm_response.get("divergences", [])
+            ]
+            
+            unique_sources = len(set(c['source'] for c in diverse_chunks))
+            
+            total_time = time.time() - request_start
+            print(f"\n⏱️  TOTAL STREAMING REQUEST TIME: {total_time:.3f}s")
+            print(f"   ├─ Search: {search_time:.3f}s ({search_time/total_time*100:.1f}%)")
+            print(f"   ├─ Diversity: {diversity_time:.3f}s ({diversity_time/total_time*100:.1f}%)")
+            print(f"   └─ LLM: {llm_time:.3f}s ({llm_time/total_time*100:.1f}%)")
+            print(f"{'='*80}\n")
+            
+            response_data = {
+                "status": "complete",
+                "headline": llm_response.get("headline"),
+                "summary": llm_response.get("summary"),
+                "answer": llm_response.get("answer") or f"{llm_response.get('headline')}\n\n{llm_response.get('summary')}",
+                "facts": facts,
+                "divergences": divergences if divergences else None,
+                "bias_analysis": llm_response.get("bias_analysis"),
+                "consensus_score": llm_response.get("consensus_score", 0.5),
+                "coverage_quality": llm_response.get("coverage_quality"),
+                "chunks_used": len(diverse_chunks),
+                "sources_analyzed": unique_sources
+            }
+            
+            yield f"data: {json.dumps(response_data)}\n\n"
+            
+        except Exception as e:
+            yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+@app.get("/articles")
+def get_articles(limit: int = 100, offset: int = 0, source: Optional[str] = None):
+    """Return articles list from news.json for the feed"""
+    arts = chunk_rag.articles
+    if source:
+        arts = [a for a in arts if a.get("source") == source]
+    total = len(arts)
+    page = arts[offset:offset + limit]
+    return {
+        "articles": [
+            {
+                "id": a.get("id"),
+                "title": a.get("title", ""),
+                "source": a.get("source", ""),
+                "url": a.get("url", ""),
+                "date": a.get("date", ""),
+                "content_length": a.get("content_length", 0),
+            }
+            for a in page
+        ],
+        "total": total,
+    }
 
 if __name__ == "__main__":
     import uvicorn
