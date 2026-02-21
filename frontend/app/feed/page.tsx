@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useArticles } from "@/hooks/useArticles";
 import { FeedGrid } from "@/components/feed/FeedGrid";
 import { SourceFilter } from "@/components/feed/SourceFilter";
+import { CategoryChips } from "@/components/search/CategoryChips";
 import { Loader2 } from "lucide-react";
 
 export default function FeedPage() {
+  const router = useRouter();
   const [activeSource, setActiveSource] = useState<string | null>(null);
   const { articles, loading, error, loadMore, hasMore } = useArticles(
     activeSource ?? undefined,
+  );
+
+  const handleCategorySelect = useCallback(
+    (category: string) => {
+      router.push(`/search?q=${encodeURIComponent(category)}`);
+    },
+    [router],
   );
 
   return (
@@ -22,6 +32,11 @@ export default function FeedPage() {
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Latest articles — click any story to fact-check it
         </p>
+      </div>
+
+      {/* Category chips */}
+      <div className="mb-6">
+        <CategoryChips onSelect={handleCategorySelect} />
       </div>
 
       {/* Source filter */}

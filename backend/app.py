@@ -25,19 +25,76 @@ from pydantic import BaseModel
 import redis as redis_client
 
 from rag_optimized import OptimizedChunkRAG
-from rss_ingester import ingest_news
-import os
-import json
-import asyncio
-import time
+from rss_ingester import ingest_news, RSS_FEEDS, RSSIngester
+from response_cache import get_response_cache
+from cache import get_redis
 from typing import AsyncGenerator, Optional
+
+logger = logging.getLogger("factnews")
+
+# ---------------------------------------------------------------------------
+# Global state
+# ---------------------------------------------------------------------------
+_articles: list[dict] = []
+_chunk_rag: Optional[OptimizedChunkRAG] = None
+_ingestion_status: dict = {"running": False, "last_run": None, "articles_added": 0}
+
+# Custom sources added by users (name -> rss_url)
+_custom_sources: dict[str, str] = {}
+
+METRICS: dict = {
+    "requests_total": 0,
+    "requests_cached": 0,
+    "requests_errors": 0,
+    "avg_response_time_ms": 0.0,
+}
+
+# Rate limiting
+_rate_limit_store: dict[str, list[float]] = {}
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = 30  # requests per window
+
+
+def _check_rate_limit(request: Request) -> Optional[str]:
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    timestamps = _rate_limit_store.setdefault(client_ip, [])
+    timestamps[:] = [t for t in timestamps if now - t < _RATE_LIMIT_WINDOW]
+    if len(timestamps) >= _RATE_LIMIT_MAX:
+        return f"Rate limit exceeded. Max {_RATE_LIMIT_MAX} requests per {_RATE_LIMIT_WINDOW}s."
+    timestamps.append(now)
+    return None
+
+
+def _update_metrics(response_time_ms: float, error: bool = False):
+    METRICS["requests_total"] += 1
+    if error:
+        METRICS["requests_errors"] += 1
+    total = METRICS["requests_total"]
+    METRICS["avg_response_time_ms"] = (
+        (METRICS["avg_response_time_ms"] * (total - 1) + response_time_ms) / total
+    )
+
+
+# ---------------------------------------------------------------------------
+# Initialize RAG on startup
+# ---------------------------------------------------------------------------
+try:
+    with open("news.json", "r", encoding="utf-8") as f:
+        _articles = json.load(f)
+    logger.info(f"Loaded {len(_articles)} articles from news.json")
+    _chunk_rag = OptimizedChunkRAG(_articles)
+except FileNotFoundError:
+    logger.warning("news.json not found - starting with empty database")
+except Exception as e:
+    logger.error(f"Error initializing RAG: {e}")
 
 app = FastAPI(title="Consensus Newsroom API")
 
 # CORS para Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://100.98.98.88:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -269,7 +326,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         
         # 1. Search for relevant CHUNKS (not full articles) - FAST
         search_start = time.time()
-        relevant_chunks = chunk_rag.search_chunks(request.question, top_k=30)
+        relevant_chunks = _chunk_rag.search_chunks(request.question, top_k=30)
         search_time = time.time() - search_start
         print(f"⏱️  Chunk search completed in {search_time:.3f}s")
         
@@ -279,7 +336,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         # 2. Ensure diversity: chunks from different sources/articles
         diversity_start = time.time()
         print(f"📊 Selecting diverse chunks from {len(set(c['source'] for c in relevant_chunks))} sources...")
-        diverse_chunks = chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
+        diverse_chunks = _chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
         diversity_time = time.time() - diversity_start
         print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
         
@@ -294,7 +351,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
         llm_start = time.time()
         print(f"🤖 Generating consensus article with {len(diverse_chunks)} chunks...")
-        llm_response = chunk_rag.generate_answer(request.question, diverse_chunks)
+        llm_response = _chunk_rag.generate_answer(request.question, diverse_chunks)
         llm_time = time.time() - llm_start
         print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
         
@@ -390,7 +447,7 @@ async def ask_question_stream(request: QuestionRequest):
             loop = asyncio.get_event_loop()
             relevant_chunks = await loop.run_in_executor(
                 None, 
-                chunk_rag.search_chunks, 
+                _chunk_rag.search_chunks, 
                 request.question, 
                 30
             )
@@ -409,7 +466,7 @@ async def ask_question_stream(request: QuestionRequest):
             diversity_start = time.time()
             diverse_chunks = await loop.run_in_executor(
                 None,
-                chunk_rag.get_diverse_chunks,
+                _chunk_rag.get_diverse_chunks,
                 relevant_chunks,
                 12
             )
@@ -423,7 +480,7 @@ async def ask_question_stream(request: QuestionRequest):
             llm_start = time.time()
             llm_response = await loop.run_in_executor(
                 None,
-                chunk_rag.generate_answer,
+                _chunk_rag.generate_answer,
                 request.question,
                 diverse_chunks
             )
@@ -493,7 +550,7 @@ async def ask_question_stream(request: QuestionRequest):
 @app.get("/articles")
 def get_articles(limit: int = 100, offset: int = 0, source: Optional[str] = None):
     """Return articles list from news.json for the feed"""
-    arts = chunk_rag.articles
+    arts = _chunk_rag.articles if _chunk_rag else _articles
     if source:
         arts = [a for a in arts if a.get("source") == source]
     total = len(arts)
@@ -512,6 +569,110 @@ def get_articles(limit: int = 100, offset: int = 0, source: Optional[str] = None
         ],
         "total": total,
     }
+
+
+class AddSourceRequest(BaseModel):
+    name: str
+    rss_url: str
+
+
+@app.get("/sources")
+def list_sources():
+    """List all tracked news sources (built-in + custom)."""
+    sources = []
+    for name, url in RSS_FEEDS.items():
+        sources.append({"name": name, "url": url, "custom": False})
+    for name, url in _custom_sources.items():
+        sources.append({"name": name, "url": url, "custom": True})
+    return {"sources": sources}
+
+
+@app.post("/sources")
+async def add_source(req: AddSourceRequest):
+    """Add a custom news source, scrape its RSS feed, and re-index."""
+    global _articles, _chunk_rag
+
+    name = req.name.strip()
+    rss_url = req.rss_url.strip()
+
+    if not name or not rss_url:
+        raise HTTPException(status_code=400, detail="Name and RSS URL are required.")
+
+    if name in RSS_FEEDS or name in _custom_sources:
+        raise HTTPException(status_code=409, detail=f"Source '{name}' already exists.")
+
+    # Validate the RSS feed
+    import feedparser
+    feed = feedparser.parse(rss_url)
+    if feed.bozo and not feed.entries:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid RSS feed URL or the feed returned no entries.",
+        )
+
+    _custom_sources[name] = rss_url
+
+    # Scrape articles from the new source
+    try:
+        loop = asyncio.get_event_loop()
+        ingester = RSSIngester()
+        articles = await loop.run_in_executor(
+            None,
+            ingester.fetch_feed,
+            name,
+            rss_url,
+            True,
+            4,
+        )
+        if articles:
+            ingester.articles = articles
+            ingester.save()
+
+            with open("news.json", "r", encoding="utf-8") as f:
+                _articles = json.load(f)
+
+            _chunk_rag = OptimizedChunkRAG(_articles)
+
+        return {
+            "success": True,
+            "message": f"Added '{name}' with {len(articles)} articles.",
+            "articles_added": len(articles),
+        }
+    except Exception as e:
+        # Roll back
+        _custom_sources.pop(name, None)
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+
+@app.delete("/sources/{name}")
+async def remove_source(name: str):
+    """Remove a custom source and its articles."""
+    global _articles, _chunk_rag
+
+    if name not in _custom_sources:
+        raise HTTPException(status_code=404, detail=f"Custom source '{name}' not found.")
+
+    _custom_sources.pop(name)
+
+    # Remove articles from this source and re-save
+    try:
+        with open("news.json", "r", encoding="utf-8") as f:
+            all_articles = json.load(f)
+
+        filtered = [a for a in all_articles if a.get("source") != name]
+        for idx, a in enumerate(filtered, 1):
+            a["id"] = idx
+
+        with open("news.json", "w", encoding="utf-8") as f:
+            json.dump(filtered, f, ensure_ascii=False, indent=2)
+
+        _articles = filtered
+        _chunk_rag = OptimizedChunkRAG(_articles)
+    except Exception as e:
+        logger.error(f"Error removing source: {e}")
+
+    return {"success": True, "message": f"Removed '{name}'."}
+
 
 if __name__ == "__main__":
     import uvicorn

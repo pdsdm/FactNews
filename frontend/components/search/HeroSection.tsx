@@ -1,12 +1,6 @@
 "use client";
 
-import { CategoryChips } from "./CategoryChips";
-
-interface HeroSectionProps {
-  onCategorySelect: (category: string) => void;
-}
-
-export function HeroSection({ onCategorySelect }: HeroSectionProps) {
+export function HeroSection() {
   return (
     <div className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
       <h2 className="text-4xl font-bold text-slate-900 mb-4 leading-tight dark:text-slate-100">
@@ -19,7 +13,6 @@ export function HeroSection({ onCategorySelect }: HeroSectionProps) {
         Get consensus-based answers backed by evidence from top news outlets.
         Detect bias, find truth.
       </p>
-      <CategoryChips onSelect={onCategorySelect} />
     </div>
   );
 }

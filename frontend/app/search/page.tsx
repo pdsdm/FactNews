@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useConsensus } from "@/hooks/useConsensus";
 import { useSearchHistoryStore } from "@/stores/searchHistoryStore";
@@ -35,19 +35,9 @@ function SearchContent() {
     addEntry(question, result);
   };
 
-  const handleCategorySelect = useCallback(
-    (category: string) => {
-      setQuestion(category);
-      ask(category).then((result) => {
-        if (result) addEntry(category, result);
-      });
-    },
-    [ask, addEntry],
-  );
-
   return (
     <div className="min-h-screen">
-      {!response && <HeroSection onCategorySelect={handleCategorySelect} />}
+      {!response && <HeroSection />}
 
       <div className={`max-w-4xl mx-auto px-6 ${response ? "pt-8" : ""}`}>
         <SearchBar
