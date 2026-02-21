@@ -8,7 +8,7 @@ import os
 import json
 import asyncio
 import time
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 app = FastAPI(title="Consensus Newsroom API")
 
@@ -363,6 +363,29 @@ async def ask_question_stream(request: QuestionRequest):
             "X-Accel-Buffering": "no"
         }
     )
+
+@app.get("/articles")
+def get_articles(limit: int = 100, offset: int = 0, source: Optional[str] = None):
+    """Return articles list from news.json for the feed"""
+    arts = chunk_rag.articles
+    if source:
+        arts = [a for a in arts if a.get("source") == source]
+    total = len(arts)
+    page = arts[offset:offset + limit]
+    return {
+        "articles": [
+            {
+                "id": a.get("id"),
+                "title": a.get("title", ""),
+                "source": a.get("source", ""),
+                "url": a.get("url", ""),
+                "date": a.get("date", ""),
+                "content_length": a.get("content_length", 0),
+            }
+            for a in page
+        ],
+        "total": total,
+    }
 
 if __name__ == "__main__":
     import uvicorn
