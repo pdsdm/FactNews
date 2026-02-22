@@ -131,13 +131,29 @@ class RSSIngester:
                 
                 if not content or len(content) < 50:
                     continue
-                
+
+                # Extract image from RSS media fields
+                img = ''
+                if hasattr(entry, 'media_thumbnail') and entry.media_thumbnail:
+                    img = entry.media_thumbnail[0].get('url', '')
+                elif hasattr(entry, 'media_content') and entry.media_content:
+                    for mc in entry.media_content:
+                        if mc.get('url', '').lower().split('?')[0].endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                            img = mc['url']
+                            break
+                elif hasattr(entry, 'enclosures') and entry.enclosures:
+                    for enc in entry.enclosures:
+                        if enc.get('type', '').startswith('image/'):
+                            img = enc.get('href', '') or enc.get('url', '')
+                            break
+
                 article = {
                     "title": entry.get('title', 'Sin título'),
                     "source": source,
                     "url": entry.get('link', ''),
                     "date": article_date,
                     "content": content,
+                    "image_url": img,
                     "scraped": False
                 }
                 

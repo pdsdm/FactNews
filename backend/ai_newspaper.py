@@ -23,14 +23,20 @@ from inference.config import PROVIDERS
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _pick_fast_provider() -> str:
-    """Return the name of an available fast provider for article generation."""
-    preferred = ["cerebras", "crusoe", "google", "grok", "openai"]
+class _ProviderQuotaError(Exception):
+    """Raised when a provider returns a rate-limit / quota-exceeded error."""
+
+
+def _pick_fast_provider(skip: set[str] | None = None) -> str | None:
+    """Return the name of an available fast provider, skipping blacklisted ones."""
+    preferred = ["cerebras", "crusoe", "google", "grok", "deepseek", "openai", "anthropic"]
     for name in preferred:
+        if skip and name in skip:
+            continue
         cfg = PROVIDERS.get(name)
         if cfg and os.getenv(cfg["env_key"]):
             return name
-    return "openai"
+    return None
 
 
 ARTICLE_SYSTEM = """You are a senior journalist at a prestigious fact-based newspaper.
@@ -138,6 +144,10 @@ def _generate_article(topic: str, context: str, provider_name: str) -> Optional[
         print(f"  ⚠️  JSON parse failed for '{topic[:50]}': {e}")
         return None
     except Exception as e:
+        err_str = str(e)
+        # Detect quota / rate-limit errors — signal caller to switch provider
+        if "429" in err_str or "quota" in err_str.lower() or "rate_limit" in err_str.lower() or "token_quota" in err_str.lower():
+            raise _ProviderQuotaError(f"{provider_name}: {err_str[:120]}") from e
         print(f"  ⚠️  Article generation failed for '{topic[:50]}': {e}")
         return None
 
@@ -148,22 +158,11 @@ def generate_newspaper_edition(
     max_stories: int = 8,
     provider_name: str | None = None,
 ) -> Dict:
-    """
-    Generate a full AI newspaper edition.
-
-    Returns:
-      {
-        "edition_time": ...,
-        "articles": [
-          { "headline", "summary", "body", "sources_referenced", "category",
-            "source_count", "cluster_size" }
-        ],
-        "total_sources": ...,
-        "generation_time_s": ...
-      }
-    """
     t0 = time.time()
-    provider = provider_name or _pick_fast_provider()
+    blacklisted: set[str] = set()
+    provider = provider_name or _pick_fast_provider(skip=blacklisted)
+    if not provider:
+        provider = "openai"  # last resort
     print(f"📰 Generating newspaper edition with {provider}...")
 
     # 1. Cluster articles
@@ -192,12 +191,40 @@ def generate_newspaper_edition(
         print(f"  ✍️  [{i+1}/{len(top_clusters)}] {topic[:60]}...")
 
         context = _build_context_from_cluster(cluster, chunk_rag)
-        article = _generate_article(topic, context, provider)
+
+        # Try current provider, auto-fallback on quota errors
+        article = None
+        all_exhausted = False
+        retries = 0
+        while retries < len(PROVIDERS):
+            try:
+                article = _generate_article(topic, context, provider)
+                break
+            except _ProviderQuotaError as exc:
+                print(f"  ⚠️  Quota exceeded on {provider}: {exc}")
+                blacklisted.add(provider)
+                next_provider = _pick_fast_provider(skip=blacklisted)
+                if not next_provider:
+                    print("  ❌  All providers quota-exceeded. Stopping generation.")
+                    all_exhausted = True
+                    break
+                print(f"  ➡️  Switching to {next_provider}")
+                provider = next_provider
+                retries += 1
+
+        if all_exhausted:
+            break
 
         if article and REQUIRED_FIELDS.issubset(article.keys()) and article.get("headline") and article.get("body"):
             article["source_count"] = cluster["unique_sources"]
             article["cluster_size"] = cluster["article_count"]
             article["original_urls"] = cluster.get("urls", [])[:5]
+            # Pick first available image from source articles in the cluster
+            image_url = next(
+                (a.get("image_url", "") for a in cluster.get("articles", []) if a.get("image_url")),
+                ""
+            )
+            article["image_url"] = image_url
             generated.append(article)
 
     elapsed = round(time.time() - t0, 1)
