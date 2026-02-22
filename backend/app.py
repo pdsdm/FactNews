@@ -20,107 +20,81 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import redis as redis_client
 
 from rag_optimized import OptimizedChunkRAG
-from rss_ingester import ingest_news
+from rss_ingester import ingest_news, RSS_FEEDS, RSSIngester
 from response_cache import get_response_cache
 from cache import get_redis
+from typing import AsyncGenerator, Optional
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
 logger = logging.getLogger("factnews")
 
-METRICS = {
+# ---------------------------------------------------------------------------
+# Global state
+# ---------------------------------------------------------------------------
+_articles: list[dict] = []
+_chunk_rag: Optional[OptimizedChunkRAG] = None
+_ingestion_status: dict = {"running": False, "last_run": None, "articles_added": 0}
+
+# Custom sources added by users (name -> rss_url)
+_custom_sources: dict[str, str] = {}
+
+METRICS: dict = {
     "requests_total": 0,
     "requests_cached": 0,
     "requests_errors": 0,
-    "avg_response_time_ms": 0,
-    "response_times": [],
+    "avg_response_time_ms": 0.0,
 }
 
-RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
-RATE_LIMIT_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
-
-_articles = []
-_chunk_rag: Optional[OptimizedChunkRAG] = None
-_ingestion_status = {"running": False, "last_run": None, "articles_added": 0}
-
-
-def _update_metrics(response_time_ms: float, cached: bool = False, error: bool = False):
-    METRICS["requests_total"] += 1
-    if cached:
-        METRICS["requests_cached"] += 1
-    if error:
-        METRICS["requests_errors"] += 1
-    
-    METRICS["response_times"].append(response_time_ms)
-    if len(METRICS["response_times"]) > 100:
-        METRICS["response_times"] = METRICS["response_times"][-100:]
-    METRICS["avg_response_time_ms"] = sum(METRICS["response_times"]) / len(METRICS["response_times"])
+# Rate limiting
+_rate_limit_store: dict[str, list[float]] = {}
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = 30  # requests per window
 
 
 def _check_rate_limit(request: Request) -> Optional[str]:
-    """Check rate limit, return error message if exceeded."""
-    client = get_redis().client
-    if client is None:
-        return None
-    
     client_ip = request.client.host if request.client else "unknown"
-    key = f"ratelimit:{client_ip}"
-    
-    try:
-        current = client.get(key)
-        if current is None:
-            client.setex(key, RATE_LIMIT_WINDOW, 1)
-        elif int(current) >= RATE_LIMIT_REQUESTS:
-            return f"Rate limit exceeded. Max {RATE_LIMIT_REQUESTS} requests per {RATE_LIMIT_WINDOW}s."
-        else:
-            client.incr(key)
-    except Exception:
-        pass
-    
+    now = time.time()
+    timestamps = _rate_limit_store.setdefault(client_ip, [])
+    timestamps[:] = [t for t in timestamps if now - t < _RATE_LIMIT_WINDOW]
+    if len(timestamps) >= _RATE_LIMIT_MAX:
+        return f"Rate limit exceeded. Max {_RATE_LIMIT_MAX} requests per {_RATE_LIMIT_WINDOW}s."
+    timestamps.append(now)
     return None
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global _articles, _chunk_rag
-    
-    logger.info("Starting FactNews API...")
-    
-    try:
-        with open("news.json", "r", encoding="utf-8") as f:
-            _articles = json.load(f)
-        logger.info(f"Loaded {len(_articles)} articles")
-    except FileNotFoundError:
-        logger.warning("No news.json found, starting with empty dataset")
-        _articles = []
-    
-    if _articles:
-        logger.info("Initializing RAG system...")
-        _chunk_rag = OptimizedChunkRAG(_articles)
-        logger.info("RAG system ready")
-    
-    yield
-    
-    logger.info("Shutting down FactNews API...")
+def _update_metrics(response_time_ms: float, error: bool = False):
+    METRICS["requests_total"] += 1
+    if error:
+        METRICS["requests_errors"] += 1
+    total = METRICS["requests_total"]
+    METRICS["avg_response_time_ms"] = (
+        (METRICS["avg_response_time_ms"] * (total - 1) + response_time_ms) / total
+    )
 
 
-app = FastAPI(
-    title="Consensus Newsroom API",
-    description="Multi-source news verification with RAG and LLM consensus",
-    version="2.0.0",
-    lifespan=lifespan,
-)
+# ---------------------------------------------------------------------------
+# Initialize RAG on startup
+# ---------------------------------------------------------------------------
+try:
+    with open("news.json", "r", encoding="utf-8") as f:
+        _articles = json.load(f)
+    logger.info(f"Loaded {len(_articles)} articles from news.json")
+    _chunk_rag = OptimizedChunkRAG(_articles)
+except FileNotFoundError:
+    logger.warning("news.json not found - starting with empty database")
+except Exception as e:
+    logger.error(f"Error initializing RAG: {e}")
 
+app = FastAPI(title="Consensus Newsroom API")
+
+# CORS para Next.js
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://100.98.98.88:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -341,33 +315,31 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
     
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
-            status_code=500,
-            detail="OpenAI API key not configured",
+            status_code=500, 
+            detail="OpenAI API key not configured. Add OPENAI_API_KEY to .env file"
         )
     
-    if not _chunk_rag:
-        raise HTTPException(status_code=503, detail="RAG not initialized")
-    
-    response_cache = get_response_cache()
-    cached = response_cache.get(request.question)
-    
-    if cached:
-        logger.info(f"Cache hit for question: {request.question[:50]}...")
-        response_time = (time.time() - start_time) * 1000
-        _update_metrics(response_time, cached=True)
-        
-        cached["cached"] = True
-        return ConsensusResponse(**cached)
-    
     try:
-        logger.info(f"Processing question: {request.question}")
+        request_start = time.time()
+        print(f"\n{'='*80}")
+        print(f"🔍 NEW REQUEST: {request.question}")
+        print(f"{'='*80}")
         
+        # 1. Search for relevant CHUNKS (not full articles) - FAST
+        search_start = time.time()
         relevant_chunks = _chunk_rag.search_chunks(request.question, top_k=30)
+        search_time = time.time() - search_start
+        print(f"⏱️  Chunk search completed in {search_time:.3f}s")
         
         if not relevant_chunks:
             raise HTTPException(status_code=404, detail="No relevant content found")
         
+        # 2. Ensure diversity: chunks from different sources/articles
+        diversity_start = time.time()
+        print(f"📊 Selecting diverse chunks from {len(set(c['source'] for c in relevant_chunks))} sources...")
         diverse_chunks = _chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
+        diversity_time = time.time() - diversity_start
+        print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
         
         sources_used = {}
         for chunk in diverse_chunks:
@@ -377,7 +349,15 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         if len(sources_used) < 3 and len(relevant_chunks) > len(diverse_chunks):
             diverse_chunks = _chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=20)
         
+        # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
+        llm_start = time.time()
+        print(f"🤖 Generating consensus article with {len(diverse_chunks)} chunks...")
         llm_response = _chunk_rag.generate_answer(request.question, diverse_chunks)
+        llm_time = time.time() - llm_start
+        print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
+        
+        # Extract council metadata for frontend display
+        council_meta = llm_response.pop("_council_meta", None)
         
         facts = [
             Fact(
@@ -409,10 +389,14 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             else headline or summary or "No answer generated."
         )
         
-        # Extract council metadata before building response
-        council_meta = llm_response.pop("_council_meta", None)
+        total_time = time.time() - request_start
+        print(f"\n⏱️  TOTAL REQUEST TIME: {total_time:.3f}s")
+        print(f"   ├─ Search: {search_time:.3f}s ({search_time/total_time*100:.1f}%)")
+        print(f"   ├─ Diversity: {diversity_time:.3f}s ({diversity_time/total_time*100:.1f}%)")
+        print(f"   └─ LLM: {llm_time:.3f}s ({llm_time/total_time*100:.1f}%)")
+        print(f"{'='*80}\n")
         
-        response = ConsensusResponse(
+        return ConsensusResponse(
             headline=headline,
             summary=summary,
             answer=answer,
@@ -443,110 +427,260 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         logger.error(f"Error processing question: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
 
-
 @app.post("/ask/stream")
-async def ask_question_stream(http_request: Request, request: QuestionRequest):
-    """Streaming SSE endpoint for real-time response updates."""
-    rate_error = _check_rate_limit(http_request)
-    if rate_error:
-        raise HTTPException(status_code=429, detail=rate_error)
+async def ask_question_stream(request: QuestionRequest):
+    """Stream consensus article generation with real-time updates"""
     
-    if not _chunk_rag:
-        raise HTTPException(status_code=503, detail="RAG not initialized")
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(
+            status_code=500, 
+            detail="OpenAI API key not configured"
+        )
     
-    async def event_generator():
+    async def generate_stream() -> AsyncGenerator[str, None]:
         try:
-            yield f"data: {json.dumps({'status': 'searching', 'message': 'Searching relevant chunks...'})}\n\n"
+            request_start = time.time()
+            print(f"\n{'='*80}")
+            print(f"🔍 STREAMING REQUEST: {request.question}")
+            print(f"{'='*80}")
             
-            relevant_chunks = await asyncio.to_thread(
-                _chunk_rag.search_chunks, request.question, 30
+            # Send initial status
+            yield f"data: {json.dumps({'status': 'searching', 'message': 'Searching for relevant sources...'})}\n\n"
+            
+            # 1. Parallel chunk search - run in thread pool to avoid blocking
+            search_start = time.time()
+            loop = asyncio.get_event_loop()
+            relevant_chunks = await loop.run_in_executor(
+                None, 
+                _chunk_rag.search_chunks, 
+                request.question, 
+                30
             )
+            search_time = time.time() - search_start
+            print(f"⏱️  Chunk search completed in {search_time:.3f}s")
             
             if not relevant_chunks:
                 yield f"data: {json.dumps({'status': 'error', 'message': 'No relevant content found'})}\n\n"
                 return
             
-            yield f"data: {json.dumps({'status': 'found', 'chunks': len(relevant_chunks)})}\n\n"
+            # Send discovery update
+            sources_count = len(set(c['source'] for c in relevant_chunks))
+            yield f"data: {json.dumps({'status': 'analyzing', 'message': f'Found content from {sources_count} sources. Analyzing...', 'sources': sources_count})}\n\n"
             
-            diverse_chunks = _chunk_rag.get_diverse_chunks(relevant_chunks, max_chunks=12)
-            yield f"data: {json.dumps({'status': 'diversifying', 'selected': len(diverse_chunks)})}\n\n"
+            # 2. Get diverse chunks - also in parallel
+            diversity_start = time.time()
+            diverse_chunks = await loop.run_in_executor(
+                None,
+                _chunk_rag.get_diverse_chunks,
+                relevant_chunks,
+                12
+            )
+            diversity_time = time.time() - diversity_start
+            print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
             
-            yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus...'})}\n\n"
+            # Send chunks selected update
+            yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus analysis...', 'chunks': len(diverse_chunks)})}\n\n"
             
-            llm_response = await _chunk_rag.generate_answer_async(request.question, diverse_chunks)
+            # 3. Generate answer with streaming
+            llm_start = time.time()
+            llm_response = await loop.run_in_executor(
+                None,
+                _chunk_rag.generate_answer,
+                request.question,
+                diverse_chunks
+            )
+            llm_time = time.time() - llm_start
+            print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
             
+            # Extract council metadata for frontend display
             council_meta = llm_response.pop("_council_meta", None)
-            logger.info(f"📊 LLM response keys: {list(llm_response.keys())}")
-            logger.info(f"📰 Headline: {llm_response.get('headline', 'N/A')[:100]}...")
-            logger.info(f"📋 Facts: {len(llm_response.get('facts', []))} extracted")
             
-            # Re-attach council_meta so the frontend can display the Council Deliberation panel
-            if council_meta:
-                llm_response["council_meta"] = council_meta
-                logger.info(f"🏛️ Council meta: judge={council_meta.get('judge')}, "
-                           f"providers={council_meta.get('providers_used')}, "
-                           f"failed={council_meta.get('providers_failed')}")
+            # Format and send final response
+            facts = [
+                {
+                    "claim": fact.get("claim", ""),
+                    "sources": fact.get("sources", []),
+                    "source_names": fact.get("source_names", []),
+                    "confidence": fact.get("confidence", "medium"),
+                    "evidence": fact.get("evidence"),
+                    "consensus": fact.get("consensus", False),
+                    "date": fact.get("date")
+                }
+                for fact in llm_response.get("facts", [])
+            ]
             
-            try:
-                response_json = json.dumps({'status': 'complete', 'response': llm_response})
-                logger.info(f"📤 Sending response ({len(response_json)} bytes)")
-                # --- DEBUG: What is actually being sent to the frontend ---
-                print(f"\n{'='*60}")
-                print(f"📤 STREAMING RESPONSE DEBUG")
-                print(f"{'='*60}")
-                print(f"  Response keys: {list(llm_response.keys())}")
-                print(f"  Has council_meta: {'council_meta' in llm_response}")
-                print(f"  Has headline: {'headline' in llm_response}")
-                print(f"  Has facts: {'facts' in llm_response} ({len(llm_response.get('facts', []))} items)")
-                print(f"  Has divergences: {'divergences' in llm_response} ({len(llm_response.get('divergences', []))} items)")
-                print(f"  consensus_score: {llm_response.get('consensus_score', 'MISSING')}")
-                print(f"  coverage_quality: {llm_response.get('coverage_quality', 'MISSING')}")
-                print(f"  Total bytes: {len(response_json)}")
-                print(f"{'='*60}\n")
-                # --- END DEBUG ---
-                yield f"data: {response_json}\n\n"
-            except Exception as json_err:
-                logger.error(f"JSON serialization error: {json_err}")
-                yield f"data: {json.dumps({'status': 'error', 'message': f'JSON error: {json_err}'})}\n\n"
-        
+            divergences = [
+                {
+                    "topic": div.get("topic", ""),
+                    "versions": div.get("versions", [])
+                }
+                for div in llm_response.get("divergences", [])
+            ]
+            
+            unique_sources = len(set(c['source'] for c in diverse_chunks))
+            
+            total_time = time.time() - request_start
+            print(f"\n⏱️  TOTAL STREAMING REQUEST TIME: {total_time:.3f}s")
+            print(f"   ├─ Search: {search_time:.3f}s ({search_time/total_time*100:.1f}%)")
+            print(f"   ├─ Diversity: {diversity_time:.3f}s ({diversity_time/total_time*100:.1f}%)")
+            print(f"   └─ LLM: {llm_time:.3f}s ({llm_time/total_time*100:.1f}%)")
+            print(f"{'='*80}\n")
+            
+            response_data = {
+                "status": "complete",
+                "headline": llm_response.get("headline"),
+                "summary": llm_response.get("summary"),
+                "answer": llm_response.get("answer") or f"{llm_response.get('headline')}\n\n{llm_response.get('summary')}",
+                "facts": facts,
+                "divergences": divergences if divergences else None,
+                "bias_analysis": llm_response.get("bias_analysis"),
+                "consensus_score": llm_response.get("consensus_score", 0.5),
+                "coverage_quality": llm_response.get("coverage_quality"),
+                "chunks_used": len(diverse_chunks),
+                "sources_analyzed": unique_sources,
+                "council_meta": council_meta,
+            }
+            
+            yield f"data: {json.dumps(response_data)}\n\n"
+            
         except Exception as e:
-            logger.error(f"Streaming error: {e}")
             yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(
-        event_generator(),
+        generate_stream(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-        },
+            "X-Accel-Buffering": "no"
+        }
     )
 
+@app.get("/articles")
+def get_articles(limit: int = 100, offset: int = 0, source: Optional[str] = None):
+    """Return articles list from news.json for the feed"""
+    arts = _chunk_rag.articles if _chunk_rag else _articles
+    if source:
+        arts = [a for a in arts if a.get("source") == source]
+    total = len(arts)
+    page = arts[offset:offset + limit]
+    return {
+        "articles": [
+            {
+                "id": a.get("id"),
+                "title": a.get("title", ""),
+                "source": a.get("source", ""),
+                "url": a.get("url", ""),
+                "date": a.get("date", ""),
+                "content_length": a.get("content_length", 0),
+            }
+            for a in page
+        ],
+        "total": total,
+    }
 
-@app.get("/suggestions")
-def get_suggestions(limit: int = 10):
-    """Get suggested queries based on indexed content."""
-    if not _chunk_rag or not _chunk_rag.chunks:
-        return {"suggestions": []}
-    
-    chunk_counts = {}
-    for chunk in _chunk_rag.chunks:
-        title = chunk.get("title", "")
-        source = chunk.get("source", "")
-        key = f"{source}: {title[:60]}"
-        chunk_counts[key] = chunk_counts.get(key, 0) + 1
-    
-    top_stories = sorted(chunk_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
-    suggestions = [{"title": title, "chunks": count} for title, count in top_stories]
-    
-    return {"suggestions": suggestions}
+
+class AddSourceRequest(BaseModel):
+    name: str
+    rss_url: str
 
 
-@app.post("/cache/clear")
-def clear_cache():
-    """Clear all caches."""
-    get_response_cache().clear_all()
-    return {"status": "cleared"}
+@app.get("/sources")
+def list_sources():
+    """List all tracked news sources (built-in + custom)."""
+    sources = []
+    for name, url in RSS_FEEDS.items():
+        sources.append({"name": name, "url": url, "custom": False})
+    for name, url in _custom_sources.items():
+        sources.append({"name": name, "url": url, "custom": True})
+    return {"sources": sources}
+
+
+@app.post("/sources")
+async def add_source(req: AddSourceRequest):
+    """Add a custom news source, scrape its RSS feed, and re-index."""
+    global _articles, _chunk_rag
+
+    name = req.name.strip()
+    rss_url = req.rss_url.strip()
+
+    if not name or not rss_url:
+        raise HTTPException(status_code=400, detail="Name and RSS URL are required.")
+
+    if name in RSS_FEEDS or name in _custom_sources:
+        raise HTTPException(status_code=409, detail=f"Source '{name}' already exists.")
+
+    # Validate the RSS feed
+    import feedparser
+    feed = feedparser.parse(rss_url)
+    if feed.bozo and not feed.entries:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid RSS feed URL or the feed returned no entries.",
+        )
+
+    _custom_sources[name] = rss_url
+
+    # Scrape articles from the new source
+    try:
+        loop = asyncio.get_event_loop()
+        ingester = RSSIngester()
+        articles = await loop.run_in_executor(
+            None,
+            ingester.fetch_feed,
+            name,
+            rss_url,
+            True,
+            4,
+        )
+        if articles:
+            ingester.articles = articles
+            ingester.save()
+
+            with open("news.json", "r", encoding="utf-8") as f:
+                _articles = json.load(f)
+
+            _chunk_rag = OptimizedChunkRAG(_articles)
+
+        return {
+            "success": True,
+            "message": f"Added '{name}' with {len(articles)} articles.",
+            "articles_added": len(articles),
+        }
+    except Exception as e:
+        # Roll back
+        _custom_sources.pop(name, None)
+        raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
+
+
+@app.delete("/sources/{name}")
+async def remove_source(name: str):
+    """Remove a custom source and its articles."""
+    global _articles, _chunk_rag
+
+    if name not in _custom_sources:
+        raise HTTPException(status_code=404, detail=f"Custom source '{name}' not found.")
+
+    _custom_sources.pop(name)
+
+    # Remove articles from this source and re-save
+    try:
+        with open("news.json", "r", encoding="utf-8") as f:
+            all_articles = json.load(f)
+
+        filtered = [a for a in all_articles if a.get("source") != name]
+        for idx, a in enumerate(filtered, 1):
+            a["id"] = idx
+
+        with open("news.json", "w", encoding="utf-8") as f:
+            json.dump(filtered, f, ensure_ascii=False, indent=2)
+
+        _articles = filtered
+        _chunk_rag = OptimizedChunkRAG(_articles)
+    except Exception as e:
+        logger.error(f"Error removing source: {e}")
+
+    return {"success": True, "message": f"Removed '{name}'."}
 
 
 if __name__ == "__main__":
