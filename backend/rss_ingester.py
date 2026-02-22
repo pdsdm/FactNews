@@ -1,6 +1,7 @@
 import feedparser
 import json
 import hashlib
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import List, Dict
@@ -33,6 +34,7 @@ class RSSIngester:
         self.output_file = output_file
         self.articles = []
         self.seen_hashes = set()
+        self._lock = threading.Lock()
         self.existing_articles = []
         
         # Load existing articles to avoid re-scraping
@@ -119,17 +121,25 @@ class RSSIngester:
                 }
                 
                 article_hash = self.get_content_hash(article['title'], article['url'])
-                if article_hash not in self.seen_hashes:
+                with self._lock:
+                    if article_hash in self.seen_hashes:
+                        continue
                     self.seen_hashes.add(article_hash)
-                    raw_articles.append(article)
-                    if len(raw_articles) >= 20:
-                        break
+                raw_articles.append(article)
+                if len(raw_articles) >= 20:
+                    break
             
             # Scrape full content in parallel (4 threads per source)
             if scrape_full and raw_articles:
+                enriched: List[Dict] = []
                 with ThreadPoolExecutor(max_workers=4) as pool:
-                    futures = {pool.submit(enrich_article_content, a): a for a in raw_articles}
-                    raw_articles = [futures[f] for f in as_completed(futures)]
+                    futures = {pool.submit(enrich_article_content, a): i for i, a in enumerate(raw_articles)}
+                    for f in as_completed(futures):
+                        try:
+                            enriched.append(f.result())
+                        except Exception as e:
+                            print(f"    ⚠️  Enrich failed: {e}")
+                raw_articles = enriched
             
             print(f"  ✅ {source}: {len(raw_articles)} artículos")
             
@@ -160,6 +170,7 @@ class RSSIngester:
         """Scrape multiple feeds concurrently."""
         start = time.time()
         workers = min(8, len(feeds))  # up to 8 feeds at once
+        results: List[Dict] = []
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
                 pool.submit(self.fetch_feed, name, url, scrape_full, days_back): name
@@ -169,9 +180,10 @@ class RSSIngester:
                 name = futures[future]
                 try:
                     arts = future.result()
-                    self.articles.extend(arts)
+                    results.extend(arts)
                 except Exception as e:
                     print(f"  ❌ {name} failed: {e}")
+        self.articles = results
         elapsed = time.time() - start
         print(f"\n⚡ Parallel fetch done: {len(self.articles)} articles in {elapsed:.1f}s")
     
