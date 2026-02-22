@@ -2,15 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import {
-  Trash2,
-  X,
-  Zap,
-  Users,
-  Crown,
-  ThumbsDown,
-  Search,
-} from "lucide-react";
+import { Trash2, X, Zap, Users, Crown, ThumbsDown, Search } from "lucide-react";
 import { useSearchHistoryStore } from "@/stores/searchHistoryStore";
 import { timeAgo } from "@/lib/utils";
 
@@ -42,7 +34,8 @@ export default function HistoryPage() {
               Search History
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {entries.length} searches · {arenaEntries.length} ConsentAI battles
+              {entries.length} searches · {arenaEntries.length} ConsentAI
+              battles
             </p>
           </div>
           {(entries.length > 0 || arenaEntries.length > 0) && (

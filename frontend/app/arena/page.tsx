@@ -295,9 +295,7 @@ export default function ArenaPage() {
       addArenaEntry(newsItem, data);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to connect to ConsentAI.",
+        err instanceof Error ? err.message : "Failed to connect to ConsentAI.",
       );
     } finally {
       setLoading(false);
