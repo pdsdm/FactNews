@@ -29,46 +29,46 @@ const MODEL_COLORS: Record<
   { dot: string; bg: string; border: string; text: string; gradient: string }
 > = {
   "GPT-4o Mini": {
-    dot: "#22c55e",
-    bg: "bg-green-50 dark:bg-green-950/30",
-    border: "border-green-200 dark:border-green-800",
-    text: "text-green-700 dark:text-green-400",
-    gradient: "from-green-500 to-emerald-600",
+    dot: "#475569",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-600 to-slate-700",
   },
   "Claude Haiku 4.5": {
-    dot: "#f59e0b",
-    bg: "bg-amber-50 dark:bg-amber-950/30",
-    border: "border-amber-200 dark:border-amber-800",
-    text: "text-amber-700 dark:text-amber-400",
-    gradient: "from-amber-500 to-orange-600",
+    dot: "#64748b",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-500 to-slate-600",
   },
   "Gemini 2.5 Flash": {
-    dot: "#3b82f6",
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    border: "border-blue-200 dark:border-blue-800",
-    text: "text-blue-700 dark:text-blue-400",
-    gradient: "from-blue-500 to-indigo-600",
+    dot: "#334155",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-700 to-slate-800",
   },
   "Grok 4.1 Fast": {
-    dot: "#a855f7",
-    bg: "bg-purple-50 dark:bg-purple-950/30",
-    border: "border-purple-200 dark:border-purple-800",
-    text: "text-purple-700 dark:text-purple-400",
-    gradient: "from-purple-500 to-violet-600",
+    dot: "#1e293b",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-800 to-slate-900",
   },
   "Mistral Large 3": {
-    dot: "#f43f5e",
-    bg: "bg-rose-50 dark:bg-rose-950/30",
-    border: "border-rose-200 dark:border-rose-800",
-    text: "text-rose-700 dark:text-rose-400",
-    gradient: "from-rose-500 to-pink-600",
+    dot: "#0f172a",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-900 to-slate-950",
   },
   "Gemini 2.0 Flash": {
-    dot: "#0ea5e9",
-    bg: "bg-sky-50 dark:bg-sky-950/30",
-    border: "border-sky-200 dark:border-sky-800",
-    text: "text-sky-700 dark:text-sky-400",
-    gradient: "from-sky-500 to-cyan-600",
+    dot: "#334155",
+    bg: "bg-slate-50 dark:bg-slate-800/30",
+    border: "border-slate-300 dark:border-slate-700",
+    text: "text-slate-700 dark:text-slate-300",
+    gradient: "from-slate-700 to-slate-800",
   },
 };
 
@@ -118,24 +118,24 @@ interface ArenaResponse {
   meta: { succeeded: number; failed: number; total: number };
 }
 
-/* ── Rating bar (horizontal stars) ─────────────────────────────────── */
-function RatingBar({ rating, color }: { rating: number; color: string }) {
+/* ── Rating bar (horizontal bars) ─────────────────────────────────── */
+function RatingBar({ rating }: { rating: number }) {
   return (
-    <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-2">
       <div className="flex gap-0.5">
         {Array.from({ length: 10 }, (_, i) => (
           <div
             key={i}
-            className={`h-2.5 w-2.5 rounded-sm transition-all ${
+            className={`h-2 w-2 rounded-sm transition-all ${
               i < rating
-                ? `bg-gradient-to-br ${color} shadow-sm`
+                ? "bg-slate-900 dark:bg-slate-100"
                 : "bg-slate-200 dark:bg-slate-700"
             }`}
           />
         ))}
       </div>
-      <span className="text-sm font-bold text-slate-900 dark:text-white ml-1">
-        {rating}
+      <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 ml-1">
+        {rating}/10
       </span>
     </div>
   );
@@ -156,7 +156,6 @@ function BarChartSection({ models }: { models: ModelResult[] }) {
 
       <div className="space-y-3">
         {ok.map((m) => {
-          const clr = getColor(m.model);
           const pct = (m.rating / maxRating) * 100;
           return (
             <div key={m.model_id} className="flex items-center gap-3">
@@ -165,10 +164,10 @@ function BarChartSection({ models }: { models: ModelResult[] }) {
               </span>
               <div className="flex-1 h-7 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative">
                 <div
-                  className={`h-full bg-gradient-to-r ${clr.gradient} rounded-lg transition-all duration-700 ease-out flex items-center justify-end pr-2`}
+                  className="h-full bg-slate-900 dark:bg-slate-100 rounded-lg transition-all duration-700 ease-out flex items-center justify-end pr-2"
                   style={{ width: `${pct}%` }}
                 >
-                  <span className="text-[11px] font-bold text-white drop-shadow-sm">
+                  <span className="text-[11px] font-bold text-white dark:text-slate-900 drop-shadow-sm">
                     {m.rating}/10
                   </span>
                 </div>
@@ -182,23 +181,9 @@ function BarChartSection({ models }: { models: ModelResult[] }) {
       </div>
 
       {/* Legend row */}
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-        <div className="flex items-center gap-4">
-          {ok.map((m) => (
-            <span
-              key={m.model_id}
-              className="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400"
-            >
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: getColor(m.model).dot }}
-              />
-              {shortName(m.model)}
-            </span>
-          ))}
-        </div>
+      <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
         <span className="text-[10px] text-slate-400 flex items-center gap-1">
-          <Clock className="w-3 h-3" /> = response time
+          <Clock className="w-3 h-3" /> Response time
         </span>
       </div>
     </div>
@@ -207,12 +192,12 @@ function BarChartSection({ models }: { models: ModelResult[] }) {
 
 /* ── Loading animation ─────────────────────────────────────────────── */
 const LOADING_MODELS = [
-  { name: "GPT-4o Mini", color: "#22c55e" },
-  { name: "Claude Haiku", color: "#f59e0b" },
-  { name: "Gemini 2.5", color: "#3b82f6" },
-  { name: "Grok 4.1", color: "#a855f7" },
-  { name: "Mistral 3", color: "#f43f5e" },
-  { name: "Gemini 2.0", color: "#0ea5e9" },
+  { name: "GPT-4o Mini" },
+  { name: "Claude Haiku" },
+  { name: "Gemini 2.5" },
+  { name: "Grok 4.1" },
+  { name: "Mistral 3" },
+  { name: "Gemini 2.0" },
 ];
 
 function LoadingSkeleton() {
@@ -234,10 +219,7 @@ function LoadingSkeleton() {
             style={{ animationDelay: `${i * 150}ms` }}
           >
             <div className="flex items-center gap-2 mb-3">
-              <span
-                className="w-2.5 h-2.5 rounded-full animate-pulse"
-                style={{ backgroundColor: m.color }}
-              />
+              <span className="w-2.5 h-2.5 rounded-full animate-pulse bg-slate-400 dark:bg-slate-600" />
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
                 {m.name}
               </span>
@@ -372,154 +354,93 @@ export default function ArenaPage() {
       {/* ── Results ─────────────────────────────────────────────── */}
       {result && (
         <div ref={resultsRef} className="max-w-7xl mx-auto px-6 space-y-6">
-          {/* Podium: top 3 */}
-          {result.models.filter((m) => m.status === "ok").length >= 3 && (
-            <div className="flex items-end justify-center gap-3 mb-2">
-              {/* 2nd place */}
-              {(() => {
-                const m = result.models.filter((x) => x.status === "ok")[1];
-                const clr = getColor(m.model);
-                return (
-                  <div className="flex flex-col items-center w-28">
-                    <Medal className="w-5 h-5 text-slate-400 mb-1" />
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      {shortName(m.model)}
-                    </span>
-                    <div
-                      className={`w-full h-16 rounded-t-xl bg-gradient-to-b ${clr.gradient} opacity-80 flex items-center justify-center`}
-                    >
-                      <span className="text-white font-bold text-lg">
-                        {m.rating}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-              {/* 1st place */}
-              {(() => {
-                const m = result.models.filter((x) => x.status === "ok")[0];
-                const clr = getColor(m.model);
-                return (
-                  <div className="flex flex-col items-center w-32">
-                    <Crown className="w-6 h-6 text-amber-500 mb-1" />
-                    <span className="text-xs font-bold text-slate-900 dark:text-white mb-1">
-                      {shortName(m.model)}
-                    </span>
-                    <div
-                      className={`w-full h-24 rounded-t-xl bg-gradient-to-b ${clr.gradient} flex items-center justify-center shadow-lg`}
-                    >
-                      <span className="text-white font-bold text-2xl">
-                        {m.rating}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-              {/* 3rd place */}
-              {(() => {
-                const m = result.models.filter((x) => x.status === "ok")[2];
-                const clr = getColor(m.model);
-                return (
-                  <div className="flex flex-col items-center w-28">
-                    <Medal className="w-5 h-5 text-amber-700 mb-1" />
-                    <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
-                      {shortName(m.model)}
-                    </span>
-                    <div
-                      className={`w-full h-12 rounded-t-xl bg-gradient-to-b ${clr.gradient} opacity-70 flex items-center justify-center`}
-                    >
-                      <span className="text-white font-bold text-lg">
-                        {m.rating}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
           {/* Model answer cards */}
           <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Trophy className="w-4 h-4 text-amber-500" />
-              Model Answers
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-6 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              Model Responses
               <span className="text-slate-400 font-normal normal-case">
                 — {result.meta.succeeded}/{result.meta.total} responded
               </span>
             </h3>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {result.models.map((m, idx) => {
-                const clr = getColor(m.model);
                 const isBest = m.model === result.judge.best;
                 const isWorst = m.model === result.judge.worst;
                 const isExpanded = expandedId === m.model_id;
-                const answerLong = (m.answer?.length || 0) > 280;
+                const answerLong = (m.answer?.length || 0) > 200;
+
+                // Position-based colors
+                const isFirst = idx === 0;
+                const isSecond = idx === 1;
+                const isThird = idx === 2;
 
                 return (
                   <div
                     key={m.model_id}
-                    className={`bg-white border rounded-xl overflow-hidden transition-all dark:bg-slate-900 ${
-                      isBest
-                        ? "border-slate-400 shadow-slate-200 shadow-md dark:border-slate-400 dark:shadow-slate-700/30"
-                        : isWorst
-                          ? "border-rose-200 dark:border-rose-800"
-                          : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
+                    className={`bg-white border-2 rounded-xl overflow-hidden transition-all flex flex-col dark:bg-slate-900 ${
+                      isFirst
+                        ? "border-yellow-400 shadow-yellow-100 shadow-md dark:border-yellow-500 dark:shadow-yellow-900/20"
+                        : isSecond
+                          ? "border-slate-400 shadow-slate-100 shadow-md dark:border-slate-500 dark:shadow-slate-800/20"
+                          : isThird
+                            ? "border-amber-600 shadow-amber-100 shadow-md dark:border-amber-700 dark:shadow-amber-900/20"
+                            : isWorst
+                              ? "border-red-400 shadow-red-100 shadow-md dark:border-red-600 dark:shadow-red-900/20"
+                              : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
                     }`}
                   >
-                    {/* Top row */}
-                    <div className="flex items-center gap-3 px-4 py-3">
-                      {/* Rank badge */}
-                      <div
-                        className={`w-8 h-8 rounded-lg bg-gradient-to-br ${clr.gradient} flex items-center justify-center flex-shrink-0 shadow-sm`}
-                      >
-                        <span className="text-white font-bold text-sm">
-                          {idx + 1}
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-slate-900 dark:text-white text-sm">
+                          {m.model}
                         </span>
-                      </div>
-
-                      {/* Name + badges */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-slate-900 dark:text-white text-sm truncate">
-                            {m.model}
-                          </span>
-                          {isBest && (
-                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded text-[10px] font-semibold dark:bg-slate-700 dark:text-slate-200">
-                              <Crown className="w-2.5 h-2.5" /> BEST
+                        <div className="flex items-center gap-1">
+                          {isFirst && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-800 rounded text-[10px] font-semibold dark:bg-yellow-900/40 dark:text-yellow-400">
+                              <Crown className="w-2.5 h-2.5" /> 1ST
+                            </span>
+                          )}
+                          {isSecond && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-slate-200 text-slate-700 rounded text-[10px] font-semibold dark:bg-slate-700 dark:text-slate-300">
+                              2ND
+                            </span>
+                          )}
+                          {isThird && (
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-semibold dark:bg-amber-900/40 dark:text-amber-400">
+                              3RD
                             </span>
                           )}
                           {isWorst && (
-                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-rose-100 text-rose-600 rounded text-[10px] font-semibold dark:bg-rose-900/40 dark:text-rose-400">
+                            <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] font-semibold dark:bg-red-900/40 dark:text-red-400">
                               <ThumbsDown className="w-2.5 h-2.5" /> WORST
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <RatingBar rating={m.rating} color={clr.gradient} />
-                          <span className="text-[10px] text-slate-400 flex items-center gap-0.5 ml-auto">
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-bold text-slate-900 dark:text-white">
+                            {m.rating}/10
+                          </span>
+                          <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
                             <Clock className="w-3 h-3" />
                             {m.latency_s}s
                           </span>
                         </div>
-                      </div>
-
-                      {/* Big score */}
-                      <div className="flex items-center gap-0.5 pl-3 border-l border-slate-100 dark:border-slate-800">
-                        <Star className="w-5 h-5 text-amber-400 fill-amber-400" />
-                        <span className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
-                          {m.rating}
-                        </span>
+                        <RatingBar rating={m.rating} />
                       </div>
                     </div>
 
                     {/* Answer body */}
-                    <div className="px-4 pb-4 pt-0">
+                    <div className="px-4 py-4 flex-1">
                       {m.status === "ok" && m.answer ? (
                         <>
                           <p
                             className={`text-sm text-slate-600 dark:text-slate-300 leading-relaxed ${
-                              !isExpanded && answerLong ? "line-clamp-3" : ""
+                              !isExpanded && answerLong ? "line-clamp-4" : ""
                             }`}
                           >
                             {m.answer}
@@ -529,7 +450,7 @@ export default function ArenaPage() {
                               onClick={() =>
                                 setExpandedId(isExpanded ? null : m.model_id)
                               }
-                              className="text-xs text-slate-900 hover:text-slate-700 dark:text-slate-100 dark:hover:text-slate-300 font-medium mt-1 transition-colors"
+                              className="text-xs text-slate-900 hover:text-slate-700 dark:text-slate-100 dark:hover:text-slate-300 font-medium mt-2 transition-colors"
                             >
                               {isExpanded ? "Show less" : "Read more…"}
                             </button>
