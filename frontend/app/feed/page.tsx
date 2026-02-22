@@ -12,6 +12,11 @@ import {
   ChevronUp,
   Sparkles,
   Search,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { basepath } from "../env";
 
@@ -104,6 +109,68 @@ function EditionSkeleton() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* ── Feed Notice ───────────────────────────────────────────────────── */
+type NoticeKind = "info" | "success" | "warning" | "alert";
+
+const NOTICE_STYLES: Record<NoticeKind, string> = {
+  info: "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-300",
+  success:
+    "bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-900/20 dark:border-emerald-800 dark:text-emerald-300",
+  warning:
+    "bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300",
+  alert:
+    "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:border-red-800 dark:text-red-300",
+};
+
+const NOTICE_ICONS: Record<
+  NoticeKind,
+  React.ComponentType<{ className?: string }>
+> = {
+  info: Info,
+  success: CheckCircle2,
+  warning: AlertTriangle,
+  alert: AlertCircle,
+};
+
+function FeedNotice({
+  kind,
+  message,
+  action,
+  onDismiss,
+}: {
+  kind: NoticeKind;
+  message: string;
+  action?: { label: string; onClick: () => void };
+  onDismiss?: () => void;
+}) {
+  const Icon = NOTICE_ICONS[kind];
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${NOTICE_STYLES[kind]}`}
+    >
+      <Icon className="w-4 h-4 flex-shrink-0" />
+      <span className="flex-1">{message}</span>
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="text-xs font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity"
+        >
+          {action.label}
+        </button>
+      )}
+      {onDismiss && (
+        <button
+          onClick={onDismiss}
+          className="ml-1 opacity-50 hover:opacity-100 transition-opacity"
+          aria-label="Dismiss"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -246,6 +313,11 @@ export default function FeedPage() {
   const [edition, setEdition] = useState<NewspaperEdition | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshed, setRefreshed] = useState(false);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const dismiss = (id: string) =>
+    setDismissed((prev) => new Set([...prev, id]));
 
   const fetchEdition = useCallback(async (force = false) => {
     setLoading(true);
@@ -259,12 +331,23 @@ export default function FeedPage() {
       }
       const data: NewspaperEdition = await res.json();
       setEdition(data);
+      if (force) {
+        setRefreshed(true);
+        setDismissed(new Set()); // reset dismissals on fresh edition
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load edition");
     } finally {
       setLoading(false);
     }
   }, []);
+
+  /* Auto-dismiss "refreshed" notice after 4 s */
+  useEffect(() => {
+    if (!refreshed) return;
+    const t = setTimeout(() => setRefreshed(false), 4000);
+    return () => clearTimeout(t);
+  }, [refreshed]);
 
   useEffect(() => {
     fetchEdition();
@@ -298,6 +381,66 @@ export default function FeedPage() {
     (a) => a && a.headline && a.body
   );
   const [hero, ...rest] = validArticles;
+
+  /* ── Compute feed notices ─────────────────────────────────────── */
+  const ageMin = Math.floor(
+    (Date.now() - new Date(edition.edition_time).getTime()) / 60_000
+  );
+  const singleSourceCount = validArticles.filter(
+    (a) => a.source_count === 1
+  ).length;
+  const allMultiSource =
+    validArticles.length > 0 && validArticles.every((a) => a.source_count >= 2);
+
+  type NoticeEntry = {
+    id: string;
+    kind: NoticeKind;
+    message: string;
+    action?: { label: string; onClick: () => void };
+    dismissable?: boolean;
+  };
+
+  const notices: NoticeEntry[] = [
+    /* 1. Edition refreshed — success, auto-dismissed via state */
+    refreshed && {
+      id: "refreshed",
+      kind: "success" as const,
+      message: `Edition refreshed — ${validArticles.length} stories compiled from ${edition.total_sources} sources.`,
+    },
+    /* 2. Stale edition — info, shown when >10 min old */
+    !refreshed &&
+      ageMin >= 10 && {
+        id: "stale",
+        kind: "info" as const,
+        message: `This edition is ${ageMin} minute${ageMin !== 1 ? "s" : ""} old. New coverage may be available.`,
+        action: { label: "Refresh now", onClick: () => fetchEdition(true) },
+        dismissable: true,
+      },
+    /* 3. Low source coverage — warning */
+    edition.total_sources < 5 && {
+      id: "lowcoverage",
+      kind: "warning" as const,
+      message: `Only ${edition.total_sources} news source${edition.total_sources !== 1 ? "s" : ""} are currently available. Coverage may be limited.`,
+      dismissable: true,
+    },
+    /* 4. All stories multi-source verified — success */
+    allMultiSource && {
+      id: "multisource",
+      kind: "success" as const,
+      message: `All ${validArticles.length} stories in this edition are corroborated by multiple independent sources.`,
+      dismissable: true,
+    },
+    /* 5. Some single-source stories — warning */
+    !allMultiSource &&
+      singleSourceCount > 0 && {
+        id: "singlesource",
+        kind: "warning" as const,
+        message: `${singleSourceCount} ${singleSourceCount === 1 ? "story has" : "stories have"} single-source coverage — verify independently before sharing.`,
+        dismissable: true,
+      },
+  ].filter(
+    (n): n is NoticeEntry => Boolean(n) && !dismissed.has((n as NoticeEntry).id)
+  );
 
   return (
     <div className="min-h-screen pb-20">
@@ -338,6 +481,21 @@ export default function FeedPage() {
 
       {/* ── Content ───────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 space-y-6">
+        {/* Notices */}
+        {notices.length > 0 && (
+          <div className="space-y-2">
+            {notices.map((n) => (
+              <FeedNotice
+                key={n.id}
+                kind={n.kind}
+                message={n.message}
+                action={n.action}
+                onDismiss={n.dismissable ? () => dismiss(n.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Hero article */}
         {hero && <ArticleCard article={hero} hero />}
 
