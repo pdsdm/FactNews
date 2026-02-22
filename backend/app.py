@@ -157,7 +157,7 @@ class ConsensusResponse(BaseModel):
     chunks_used: int | None = None
     sources_analyzed: int | None = None
     cached: bool = False
-    mode: str | None = None
+    council_meta: dict | None = None
 
 
 @app.get("/")
@@ -261,9 +261,7 @@ async def _run_ingestion(max_feeds: int | None, scrape_full: bool, days_back: in
     logger.info("Starting RSS ingestion...")
     
     try:
-        loop = asyncio.get_event_loop()
-        stats = await loop.run_in_executor(
-            None,
+        stats = await asyncio.to_thread(
             lambda: ingest_news(max_feeds=max_feeds, scrape_full=scrape_full, days_back=days_back),
         )
         
@@ -385,9 +383,8 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         llm_time = time.time() - llm_start
         print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
         
-        # Extract model information from response
-        providers_used = llm_response.pop("_providers_used", [])
-        model_label = " & ".join(providers_used) if providers_used else "Unknown"
+        # Extract council metadata for frontend display
+        council_meta = llm_response.pop("_council_meta", None)
         
         facts = [
             Fact(
@@ -439,7 +436,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             chunks_used=len(diverse_chunks),
             sources_analyzed=unique_sources,
             cached=False,
-            mode=request.mode,
+            council_meta=council_meta,
         )
         
         response_cache.set(request.question, response.model_dump())
@@ -480,9 +477,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 1. Parallel chunk search - run in thread pool to avoid blocking
             search_start = time.time()
-            loop = asyncio.get_event_loop()
-            relevant_chunks = await loop.run_in_executor(
-                None, 
+            relevant_chunks = await asyncio.to_thread(
                 _chunk_rag.search_chunks, 
                 request.question, 
                 30
@@ -500,8 +495,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 2. Get diverse chunks - also in parallel
             diversity_start = time.time()
-            diverse_chunks = await loop.run_in_executor(
-                None,
+            diverse_chunks = await asyncio.to_thread(
                 _chunk_rag.get_diverse_chunks,
                 relevant_chunks,
                 12
@@ -515,26 +509,13 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 3. Generate answer with streaming
             llm_start = time.time()
-            if request.mode == "fast":
-                llm_response = await loop.run_in_executor(
-                    None,
-                    _chunk_rag.generate_answer_single,
-                    request.question,
-                    diverse_chunks
-                )
-            else:
-                llm_response = await loop.run_in_executor(
-                    None,
-                    _chunk_rag.generate_answer,
-                    request.question,
-                    diverse_chunks
-                )
+            llm_response = await asyncio.to_thread(
+                _chunk_rag.generate_answer,
+                request.question,
+                diverse_chunks
+            )
             llm_time = time.time() - llm_start
             print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
-            
-            # Extract model information from response
-            providers_used = llm_response.pop("_providers_used", [])
-            model_label = " & ".join(providers_used) if providers_used else "Unknown"
             
             # Format and send final response
             facts = [
@@ -580,7 +561,8 @@ async def ask_question_stream(request: QuestionRequest):
                 "consensus_score": llm_response.get("consensus_score", 0.5),
                 "coverage_quality": llm_response.get("coverage_quality"),
                 "chunks_used": len(diverse_chunks),
-                "sources_analyzed": unique_sources
+                "sources_analyzed": unique_sources,
+                "council_meta": council_meta,
             }
             
             yield f"data: {json.dumps(response_data)}\n\n"
@@ -773,10 +755,8 @@ async def add_source(req: AddSourceRequest):
 
     # Scrape articles from the new source
     try:
-        loop = asyncio.get_event_loop()
         ingester = RSSIngester()
-        articles = await loop.run_in_executor(
-            None,
+        articles = await asyncio.to_thread(
             ingester.fetch_feed,
             name,
             rss_url,

@@ -44,6 +44,26 @@ class InferenceProvider(ABC):
     ) -> CompletionResponse:
         """Send a chat completion request and return a standardized response."""
 
+    async def complete_async(
+        self,
+        messages: list[dict],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        json_mode: bool = False,
+        **kwargs,
+    ) -> CompletionResponse:
+        """Async version of complete. Default implementation wraps sync."""
+        return self.complete(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            json_mode=json_mode,
+            **kwargs,
+        )
+
     # -- embeddings (optional) -------------------------------------------
 
     def embed(self, text: str | list[str], *, model: str | None = None) -> list[list[float]]:

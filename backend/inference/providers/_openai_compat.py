@@ -7,7 +7,7 @@ to override `name` and optionally tweak defaults.
 """
 from __future__ import annotations
 import os
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
 
 from inference.base import InferenceProvider, CompletionResponse
@@ -34,6 +34,10 @@ class OpenAICompatibleProvider(InferenceProvider):
         self._cfg = cfg
 
         self._client = OpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+        )
+        self._async_client = AsyncOpenAI(
             api_key=self._api_key,
             base_url=self._base_url,
         )
@@ -70,6 +74,44 @@ class OpenAICompatibleProvider(InferenceProvider):
             params["response_format"] = {"type": "json_object"}
 
         response = self._client.chat.completions.create(**params)
+        choice = response.choices[0]
+
+        return CompletionResponse(
+            content=choice.message.content or "",
+            model=response.model or params["model"],
+            provider=self.name,
+            usage={
+                "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
+                "completion_tokens": getattr(response.usage, "completion_tokens", 0),
+                "total_tokens": getattr(response.usage, "total_tokens", 0),
+            } if response.usage else {},
+            raw=response.to_dict() if hasattr(response, "to_dict") else {},
+        )
+
+    async def complete_async(
+        self,
+        messages: list[dict],
+        *,
+        model: str | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        json_mode: bool = False,
+        **kwargs,
+    ) -> CompletionResponse:
+        params: dict = {
+            "model": model or self._default_model,
+            "messages": messages,
+            "temperature": temperature,
+            **kwargs,
+        }
+
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+
+        if json_mode:
+            params["response_format"] = {"type": "json_object"}
+
+        response = await self._async_client.chat.completions.create(**params)
         choice = response.choices[0]
 
         return CompletionResponse(

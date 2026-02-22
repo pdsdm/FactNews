@@ -9,10 +9,13 @@ Usage:
 """
 from __future__ import annotations
 import json
-import time
+import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from inference.base import CompletionResponse
 from inference.factory import get_provider
+
+logger = logging.getLogger("factnews.council")
 
 
 JUDGE_SYSTEM_PROMPT = """You are an impartial judge evaluating responses from multiple AI models.
@@ -53,19 +56,25 @@ class ModelCouncil:
         self.judge_name = judge
         self.max_workers = max_workers
 
-    def _query_provider(self, provider_name: str, messages: list[dict], **kwargs) -> tuple[str, CompletionResponse | str, float]:
-        """Query a single provider, returning (name, response_or_error, time_ms)."""
+    def _query_provider(self, provider_name: str, messages: list[dict], **kwargs) -> tuple[str, CompletionResponse | str]:
+        """Query a single provider, returning (name, response_or_error)."""
         try:
-            start = time.time()
             provider = get_provider(provider_name)
             response = provider.complete(messages, **kwargs)
-            elapsed = (time.time() - start) * 1000
-            print(f"  ⏱️  {provider_name}: {elapsed:.0f}ms")
-            return provider_name, response, elapsed
+            return provider_name, response
         except Exception as e:
-            elapsed = (time.time() - start) * 1000
-            print(f"  ❌ {provider_name}: FAILED in {elapsed:.0f}ms — {e}")
-            return provider_name, f"ERROR: {e}", elapsed
+            return provider_name, f"ERROR: {e}"
+
+    async def _query_provider_async(self, provider_name: str, messages: list[dict], **kwargs) -> tuple[str, CompletionResponse | str]:
+        """Query a single provider asynchronously, returning (name, response_or_error)."""
+        try:
+            provider = get_provider(provider_name)
+            response = await provider.complete_async(messages, **kwargs)
+            logger.info(f"🔄 {provider_name} responded ({len(response.content)} chars)")
+            return provider_name, response
+        except Exception as e:
+            logger.error(f"❌ {provider_name} failed: {e}")
+            return provider_name, f"ERROR: {e}"
 
     def deliberate(
         self,
@@ -97,10 +106,6 @@ class ModelCouncil:
         responses: dict[str, str] = {}
         succeeded: list[str] = []
         failed: list[str] = []
-        timings: dict[str, float] = {}
-
-        print(f"\n🏛️  COUNCIL: Querying {len(self.provider_names)} providers in parallel...")
-        phase1_start = time.time()
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as pool:
             futures = {
@@ -108,20 +113,13 @@ class ModelCouncil:
                 for name in self.provider_names
             }
             for future in as_completed(futures):
-                name, result, elapsed = future.result()
-                timings[name] = elapsed
+                name, result = future.result()
                 if isinstance(result, CompletionResponse):
                     responses[name] = result.content
                     succeeded.append(name)
                 else:
                     responses[name] = result  # error string
                     failed.append(name)
-
-        phase1_time = (time.time() - phase1_start) * 1000
-        print(f"  ⏱️  Phase 1 total (parallel): {phase1_time:.0f}ms")
-        print(f"  ✅ Succeeded: {succeeded}")
-        if failed:
-            print(f"  ❌ Failed: {failed}")
 
         if not succeeded:
             return {
@@ -145,8 +143,6 @@ class ModelCouncil:
 {council_text}"""
 
         # -- Phase 3: judge evaluates ---------------------------------------
-        print(f"\n⚖️  JUDGE ({self.judge_name}): Synthesizing responses...")
-        judge_start = time.time()
         judge = get_provider(self.judge_name)
         active_judge_prompt = judge_system_prompt or JUDGE_SYSTEM_PROMPT
         judge_response = judge.complete(
@@ -157,9 +153,6 @@ class ModelCouncil:
             temperature=judge_temperature,
             json_mode=True,
         )
-        judge_time = (time.time() - judge_start) * 1000
-        print(f"  ⏱️  Judge ({self.judge_name}): {judge_time:.0f}ms")
-        timings[f"judge_{self.judge_name}"] = judge_time
 
         clean_content = judge_response.content.strip()
         if clean_content.startswith("```"):
@@ -175,17 +168,112 @@ class ModelCouncil:
         except json.JSONDecodeError:
             judgment = {"synthesis": clean_content, "parse_error": True}
 
-        total_time = phase1_time + judge_time
-        print(f"\n🏛️  COUNCIL TOTAL: {total_time:.0f}ms (providers: {phase1_time:.0f}ms + judge: {judge_time:.0f}ms)")
-        for name, ms in sorted(timings.items(), key=lambda x: x[1]):
-            print(f"     {name}: {ms:.0f}ms")
-        print()
-
         return {
             "responses": responses,
             "judgment": judgment,
             "raw_judgment": judge_response.content,
             "providers_used": succeeded,
             "providers_failed": failed,
-            "timings": timings,
+        }
+
+    async def deliberate_async(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        temperature: float = 0.7,
+        judge_temperature: float = 0.2,
+        judge_system_prompt: str | None = None,
+    ) -> dict:
+        """
+        Async version: Send prompt to all council providers in parallel, then have the judge evaluate.
+
+        Returns:
+            {
+                "responses": {provider_name: content_or_error, ...},
+                "judgment": parsed judge response (dict),
+                "raw_judgment": raw judge text,
+                "providers_used": [names that succeeded],
+                "providers_failed": [names that failed],
+            }
+        """
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        logger.info(f"🏛️ Council deliberating with {len(self.provider_names)} providers...")
+
+        tasks = [
+            self._query_provider_async(name, messages, temperature=temperature)
+            for name in self.provider_names
+        ]
+        results = await asyncio.gather(*tasks)
+
+        responses: dict[str, str] = {}
+        succeeded: list[str] = []
+        failed: list[str] = []
+
+        for name, result in results:
+            if isinstance(result, CompletionResponse):
+                responses[name] = result.content
+                succeeded.append(name)
+                logger.info(f"✅ {name}: {len(result.content)} chars")
+            else:
+                responses[name] = result
+                failed.append(name)
+
+        if not succeeded:
+            return {
+                "responses": responses,
+                "judgment": {"error": "All providers failed"},
+                "raw_judgment": "",
+                "providers_used": succeeded,
+                "providers_failed": failed,
+            }
+
+        council_text = "\n\n".join(
+            f"=== MODEL: {name} ===\n{responses[name]}"
+            for name in succeeded
+        )
+
+        judge_prompt = f"""The user asked: "{prompt}"
+
+{len(succeeded)} models provided responses. Evaluate them and synthesize the best answer.
+
+{council_text}"""
+
+        logger.info(f"⚖️ Judge ({self.judge_name}) evaluating {len(succeeded)} responses...")
+        judge = get_provider(self.judge_name)
+        active_judge_prompt = judge_system_prompt or JUDGE_SYSTEM_PROMPT
+        judge_response = await judge.complete_async(
+            [
+                {"role": "system", "content": active_judge_prompt},
+                {"role": "user", "content": judge_prompt},
+            ],
+            temperature=judge_temperature,
+            json_mode=True,
+        )
+
+        clean_content = judge_response.content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
+        try:
+            judgment = json.loads(clean_content)
+        except json.JSONDecodeError:
+            judgment = {"synthesis": clean_content, "parse_error": True}
+
+        logger.info(f"✅ Council complete: {len(succeeded)} providers succeeded, {len(failed)} failed")
+        return {
+            "responses": responses,
+            "judgment": judgment,
+            "raw_judgment": judge_response.content,
+            "providers_used": succeeded,
+            "providers_failed": failed,
         }
