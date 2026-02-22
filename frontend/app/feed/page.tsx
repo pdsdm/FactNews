@@ -245,15 +245,26 @@ function ArticleCard({
             )}
           </div>
 
-          <button
-            onClick={() =>
-              router.push(`/search?q=${encodeURIComponent(headline)}`)
-            }
-            className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
-          >
-            <Search className="w-3 h-3" />
-            Fact-check
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() =>
+                router.push(`/search?q=${encodeURIComponent(headline)}`)
+              }
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+            >
+              <Search className="w-3 h-3" />
+              Fast Check
+            </button>
+            <button
+              onClick={() =>
+                router.push(`/council?q=${encodeURIComponent(headline)}`)
+              }
+              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+            >
+              <Newspaper className="w-3 h-3" />
+              Council
+            </button>
+          </div>
         </div>
       </div>
 
