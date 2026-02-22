@@ -106,6 +106,8 @@ interface ModelResult {
 }
 
 interface JudgeResult {
+  agreements?: string[];
+  disagreements?: string[];
   verdict: string;
   best: string;
   worst: string;
@@ -142,48 +144,67 @@ function RatingBar({ rating }: { rating: number }) {
 }
 
 /* ── Bar chart component ──────────────────────────────────────────── */
-function BarChartSection({ models }: { models: ModelResult[] }) {
-  const ok = models.filter((m) => m.status === "ok");
-  if (ok.length === 0) return null;
-  const maxRating = Math.max(...ok.map((m) => m.rating), 1);
+function BarChartSection({ judge }: { judge: JudgeResult }) {
+  const agreements = judge.agreements || [];
+  const disagreements = judge.disagreements || [];
+
+  if (agreements.length === 0 && disagreements.length === 0) return null;
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm dark:bg-slate-900 dark:border-slate-800">
       <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 uppercase tracking-wider mb-6 flex items-center gap-2">
         <BarChart3 className="w-4 h-4 text-slate-500" />
-        Score Comparison
+        Agreement & Disagreement
       </h3>
 
-      <div className="space-y-3">
-        {ok.map((m) => {
-          const pct = (m.rating / maxRating) * 100;
-          return (
-            <div key={m.model_id} className="flex items-center gap-3">
-              <span className="text-xs font-medium text-slate-600 dark:text-slate-400 w-20 text-right truncate">
-                {shortName(m.model)}
-              </span>
-              <div className="flex-1 h-7 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden relative">
-                <div
-                  className="h-full bg-slate-900 dark:bg-slate-100 rounded-lg transition-all duration-700 ease-out flex items-center justify-end pr-2"
-                  style={{ width: `${pct}%` }}
-                >
-                  <span className="text-[11px] font-bold text-white dark:text-slate-900 drop-shadow-sm">
-                    {m.rating}/10
-                  </span>
-                </div>
-              </div>
-              <span className="text-[11px] text-slate-400 w-12 text-right tabular-nums">
-                {m.latency_s}s
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {/* Agreements */}
+      {agreements.length > 0 && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-green-500"></div>
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Agreement ({agreements.length} points)
+            </span>
+          </div>
+          <ul className="space-y-2 pl-4">
+            {agreements.map((point, idx) => (
+              <li
+                key={idx}
+                className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed"
+              >
+                • {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
-      {/* Legend row */}
-      <div className="flex items-center justify-end mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-        <span className="text-[10px] text-slate-400 flex items-center gap-1">
-          <Clock className="w-3 h-3" /> Response time
+      {/* Disagreements */}
+      {disagreements.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              Divergent views ({disagreements.length} points)
+            </span>
+          </div>
+          <ul className="space-y-2 pl-4">
+            {disagreements.map((point, idx) => (
+              <li
+                key={idx}
+                className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed"
+              >
+                • {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Info footer */}
+      <div className="flex items-center justify-center mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <span className="text-[10px] text-slate-400">
+          Analyzed by {judge.judge_model} judge
         </span>
       </div>
     </div>
@@ -420,17 +441,14 @@ export default function ArenaPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-slate-900 dark:text-white">
-                            {m.rating}/10
-                          </span>
-                          <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                            <Clock className="w-3 h-3" />
-                            {m.latency_s}s
-                          </span>
-                        </div>
-                        <RatingBar rating={m.rating} />
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-bold text-slate-900 dark:text-white">
+                          {m.rating}/10
+                        </span>
+                        <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                          <Clock className="w-3 h-3" />
+                          {m.latency_s}s
+                        </span>
                       </div>
                     </div>
 
@@ -505,8 +523,8 @@ export default function ArenaPage() {
             </div>
           </div>
 
-          {/* Bar chart */}
-          <BarChartSection models={result.models} />
+          {/* Agreement & Disagreement Analysis */}
+          <BarChartSection judge={result.judge} />
 
           {/* Bookmark button */}
           {(() => {

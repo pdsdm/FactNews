@@ -53,10 +53,11 @@ Here are the model answers:
 {analyst_block}
 
 Rate each model's answer from 1 to 10 based on accuracy, depth, and clarity.
+Identify key points where models AGREE and DISAGREE.
 Then write a short verdict (2-3 sentences) explaining which model did best and which did worst, and why.
 
 Reply ONLY with valid JSON:
-{{"ratings":{{"Model Name":8,"Another Model":6}},"verdict":"Your 2-3 sentence summary of rankings.","best":"Best Model Name","worst":"Worst Model Name"}}"""
+{{"ratings":{{"Model Name":8,"Another Model":6}},"agreements":["Point 1 where models agree","Point 2 where models agree"],"disagreements":["Point 1 where models disagree","Point 2 where models disagree"],"verdict":"Your 2-3 sentence summary of rankings.","best":"Best Model Name","worst":"Worst Model Name"}}"""
 
 ANALYST_TIMEOUT_S = 28
 MIN_ANALYSTS_FOR_JUDGE = 3
@@ -163,6 +164,8 @@ def get_ai_industry_analysis(news_data: str) -> dict:
                         ratings[k] = 5
                 judge = {
                     "ratings": ratings,
+                    "agreements": parsed.get("agreements", []),
+                    "disagreements": parsed.get("disagreements", []),
                     "verdict": parsed.get("verdict", "").strip(),
                     "best": parsed.get("best", "").strip(),
                     "worst": parsed.get("worst", "").strip(),
@@ -199,6 +202,8 @@ def get_ai_industry_analysis(news_data: str) -> dict:
     return {
         "models": models,
         "judge": {
+            "agreements": judge.get("agreements", []),
+            "disagreements": judge.get("disagreements", []),
             "verdict": judge["verdict"],
             "best": judge["best"],
             "worst": judge["worst"],
