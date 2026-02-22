@@ -473,6 +473,21 @@ export default function FeedPage() {
         </div>
       </div>
 
+      {/* ── Banner ──────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 -mt-4 pb-4 flex flex-col items-center gap-3">
+        <img
+          src="/llm-council.png"
+          alt="LLM Alignment Council"
+          className="w-full max-w-2xl rounded-2xl"
+        />
+        <h2 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+          The newspaper for the new age
+        </h2>
+        <p className="text-lg text-slate-500 dark:text-slate-400">
+          Don&apos;t trust, verify.
+        </p>
+      </div>
+
       {/* ── Content ───────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 space-y-6">
         {/* Notices */}
