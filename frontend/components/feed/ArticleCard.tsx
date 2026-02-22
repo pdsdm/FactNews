@@ -56,7 +56,7 @@ export function ArticleCard({ article, hero = false }: ArticleCardProps) {
 
         {/* Headline */}
         <h2
-          className={`font-bold text-slate-900 dark:text-slate-100 leading-snug flex-1 ${
+          className={`font-bold text-slate-900 dark:text-slate-100 leading-snug flex-1 font-times-new-roman ${
             hero ? "text-2xl mb-4" : "text-base mb-3"
           }`}
         >

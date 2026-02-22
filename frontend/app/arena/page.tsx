@@ -311,7 +311,7 @@ export default function ArenaPage() {
         <div className="inline-flex items-center justify-center w-14 h-14 mb-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg shadow-emerald-500/20">
           <Swords className="w-7 h-7 text-white" />
         </div>
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-3 leading-tight">
+        <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-3 leading-tight font-times-new-roman">
           LLM{" "}
           <span className="bg-gradient-to-r from-emerald-600 to-teal-500 bg-clip-text text-transparent">
             Arena

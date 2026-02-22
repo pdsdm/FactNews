@@ -3,7 +3,7 @@
 export function HeroSection() {
   return (
     <div className="max-w-3xl mx-auto px-6 pt-20 pb-12 text-center">
-      <h2 className="text-4xl font-bold text-slate-900 mb-4 leading-tight dark:text-slate-100">
+      <h2 className="text-4xl font-bold text-slate-900 mb-4 leading-tight dark:text-slate-100 font-times-new-roman">
         Verify facts across{" "}
         <span className="text-blue-600 dark:text-blue-400">
           multiple news sources

@@ -165,7 +165,7 @@ function ArticleCard({
 
       {/* Headline */}
       <h2
-        className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 ${headlineClass}`}
+        className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 font-times-new-roman ${headlineClass}`}
       >
         {headline}
       </h2>
