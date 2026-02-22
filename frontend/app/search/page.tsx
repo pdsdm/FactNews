@@ -42,7 +42,7 @@ function SearchContent() {
     <div className="min-h-screen">
       {!response && <HeroSection />}
 
-      <div className={`max-w-4xl mx-auto px-6 ${response ? "pt-8" : ""}`}>
+      <div className={`max-w-7xl mx-auto px-6 ${response ? "pt-8" : ""}`}>
         <SearchBar
           value={question}
           onChange={setQuestion}
@@ -57,7 +57,7 @@ function SearchContent() {
       <ErrorBanner message={error} />
 
       {response && (
-        <div className="max-w-5xl mx-auto px-6 py-12">
+        <div className="max-w-7xl mx-auto px-6 py-12">
           <ResultsContainer response={response} query={question} />
         </div>
       )}

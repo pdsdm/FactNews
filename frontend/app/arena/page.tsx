@@ -217,7 +217,7 @@ const LOADING_MODELS = [
 
 function LoadingSkeleton() {
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10">
+    <div className="max-w-7xl mx-auto px-6 py-10">
       <div className="text-center mb-8">
         <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 rounded-full">
           <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
@@ -307,7 +307,7 @@ export default function ArenaPage() {
   return (
     <div className="min-h-screen pb-20">
       {/* ── Hero ────────────────────────────────────────────────── */}
-      <div className="max-w-3xl mx-auto px-6 pt-14 pb-10 text-center">
+      <div className="max-w-4xl mx-auto px-6 pt-14 pb-10 text-center">
         <div className="inline-flex items-center justify-center w-14 h-14 mb-5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg shadow-emerald-500/20">
           <Swords className="w-7 h-7 text-white" />
         </div>
@@ -323,7 +323,7 @@ export default function ArenaPage() {
       </div>
 
       {/* ── Input ───────────────────────────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-6 mb-8">
+      <div className="max-w-3xl mx-auto px-6 mb-8">
         <form
           onSubmit={handleAnalyze}
           className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 dark:bg-slate-900 dark:border-slate-700 dark:focus-within:border-emerald-500 dark:focus-within:ring-emerald-900/20"
@@ -363,7 +363,7 @@ export default function ArenaPage() {
 
       {/* Error */}
       {error && (
-        <div className="max-w-2xl mx-auto px-6 mb-6">
+        <div className="max-w-3xl mx-auto px-6 mb-6">
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 flex items-center gap-3 text-sm dark:bg-red-900/20 dark:border-red-800 dark:text-red-400">
             <XCircle className="w-5 h-5 flex-shrink-0" />
             {error}
@@ -376,7 +376,7 @@ export default function ArenaPage() {
 
       {/* ── Results ─────────────────────────────────────────────── */}
       {result && (
-        <div ref={resultsRef} className="max-w-4xl mx-auto px-6 space-y-6">
+        <div ref={resultsRef} className="max-w-7xl mx-auto px-6 space-y-6">
           {/* Podium: top 3 */}
           {result.models.filter((m) => m.status === "ok").length >= 3 && (
             <div className="flex items-end justify-center gap-3 mb-2">

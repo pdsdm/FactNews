@@ -120,7 +120,7 @@ export default function SourcesPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 pb-24">
+    <div className="max-w-7xl mx-auto px-4 py-8 pb-24">
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-1">
@@ -200,7 +200,7 @@ export default function SourcesPage() {
       {/* Sticky save bar */}
       {!loading && hasChanges && (
         <div className="fixed bottom-0 inset-x-0 z-30 border-t border-slate-200 bg-white/80 backdrop-blur-lg dark:bg-slate-900/80 dark:border-slate-700">
-          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
             <span className="text-sm text-amber-600 font-medium dark:text-amber-400">
               Unsaved changes
             </span>

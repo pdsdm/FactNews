@@ -45,7 +45,7 @@ function TopicContent({ params }: TopicPageProps) {
   if (!pageData) {
     return (
       <div className="min-h-screen">
-        <div className="max-w-5xl mx-auto px-6 pt-10">
+        <div className="max-w-7xl mx-auto px-6 pt-10">
           <Link
             href="/history"
             className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 mb-6 dark:text-blue-400"
@@ -70,7 +70,7 @@ function TopicContent({ params }: TopicPageProps) {
 
   return (
     <div className="min-h-screen">
-      <div className="max-w-5xl mx-auto px-6 pt-8 pb-16">
+      <div className="max-w-7xl mx-auto px-6 pt-8 pb-16">
         <div className="flex items-center justify-between mb-6">
           <Link
             href={source === "bookmarks" ? "/bookmarks" : "/history"}

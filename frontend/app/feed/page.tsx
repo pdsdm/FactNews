@@ -76,7 +76,7 @@ function formatEditionTime(iso: string) {
 /* ── Loading skeleton ──────────────────────────────────────────────── */
 function EditionSkeleton() {
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 space-y-6">
+    <div className="max-w-7xl mx-auto px-6 py-10 space-y-6">
       <div className="text-center space-y-3 animate-pulse">
         <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-lg w-64 mx-auto" />
         <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-48 mx-auto" />
@@ -90,8 +90,8 @@ function EditionSkeleton() {
         <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded w-5/6" />
       </div>
       {/* Grid skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[1, 2, 3, 4].map((i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[1, 2, 3, 4, 5, 6].map((i) => (
           <div
             key={i}
             className="animate-pulse border border-slate-200 dark:border-slate-800 rounded-xl p-5"
@@ -175,9 +175,9 @@ function ArticleCard({
       {/* Actions row */}
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-1 flex-wrap">
-          {(article.sources_referenced ?? []).slice(0, 4).map((src) => (
+          {(article.sources_referenced ?? []).slice(0, 4).map((src, i) => (
             <span
-              key={src}
+              key={`${src}-${i}`}
               className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
             >
               {src}
@@ -257,7 +257,7 @@ export default function FeedPage() {
   /* Error */
   if (error && !edition) {
     return (
-      <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+      <div className="max-w-7xl mx-auto px-6 py-20 text-center">
         <Newspaper className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
           Could not generate today&apos;s edition.
@@ -280,7 +280,7 @@ export default function FeedPage() {
   return (
     <div className="min-h-screen pb-20">
       {/* ── Masthead ──────────────────────────────────────────── */}
-      <div className="max-w-4xl mx-auto px-6 pt-10 pb-6">
+      <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
         <div className="text-center border-b-2 border-slate-900 dark:border-slate-100 pb-4 mb-1">
           <div className="flex items-center justify-center gap-2 mb-1">
             <Sparkles className="w-4 h-4 text-emerald-600" />
@@ -315,7 +315,7 @@ export default function FeedPage() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────── */}
-      <div className="max-w-4xl mx-auto px-6 space-y-6">
+      <div className="max-w-7xl mx-auto px-6 space-y-6">
         {/* Hero article */}
         {hero && <ArticleCard article={hero} hero />}
 
@@ -330,9 +330,9 @@ export default function FeedPage() {
           </div>
         )}
 
-        {/* 2-col grid */}
+        {/* 3-col grid */}
         {rest.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {rest.map((article, i) => (
               <ArticleCard key={i} article={article} />
             ))}

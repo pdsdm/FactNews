@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useThemeStore } from "@/stores/themeStore";
-import { Sidebar } from "./Sidebar";
+import { Header } from "./Header";
 import { BottomNav } from "./BottomNav";
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
@@ -28,13 +28,13 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950">
-      {/* Desktop sidebar */}
+      {/* Top header nav — hidden on mobile */}
       <div className="hidden md:block">
-        <Sidebar />
+        <Header />
       </div>
 
-      {/* Main content — offset by sidebar on desktop, padded bottom on mobile */}
-      <main className="md:ml-56 pb-16 md:pb-0 min-h-screen">
+      {/* Main content — offset by header on desktop, padded bottom on mobile */}
+      <main className="pt-0 md:pt-14 pb-16 md:pb-0 min-h-screen">
         {children}
       </main>
 
