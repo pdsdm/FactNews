@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Send,
   Loader2,
@@ -259,18 +260,53 @@ function LoadingSkeleton() {
 }
 
 /* ── Page ──────────────────────────────────────────────────────────── */
-export default function ArenaPage() {
-  const [newsItem, setNewsItem] = useState("");
+function ArenaContent() {
+  const searchParams = useSearchParams();
+  const [newsItem, setNewsItem] = useState(searchParams.get("q") || "");
   const [result, setResult] = useState<ArenaResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   const addArenaEntry = useSearchHistoryStore((s) => s.addArenaEntry);
   const addArenaBookmark = useBookmarkStore((s) => s.addArenaBookmark);
   const isArenaBookmarked = useBookmarkStore((s) => s.isArenaBookmarked);
   const removeArenaBookmark = useBookmarkStore((s) => s.removeArenaBookmark);
   const arenaBookmarks = useBookmarkStore((s) => s.arenaBookmarks);
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q && !submitted) {
+      setSubmitted(true);
+      handleAnalyzeWithQuery(q);
+    }
+  }, [searchParams, submitted]);
+
+  const handleAnalyzeWithQuery = async (query: string) => {
+    if (!query.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setError(null);
+    setExpandedId(null);
+    try {
+      const res = await fetch(`${API}/api/ai-pulse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ news_item: query }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+      setResult(data);
+      addArenaEntry(query, data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to connect to ConsentAI.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Scroll to results when they arrive
   useEffect(() => {
@@ -282,28 +318,8 @@ export default function ArenaPage() {
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newsItem.trim()) return;
-    setLoading(true);
-    setResult(null);
-    setError(null);
-    setExpandedId(null);
-    try {
-      const res = await fetch(`${API}/api/ai-pulse`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ news_item: newsItem }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
-      setResult(data);
-      // Auto-save to history
-      addArenaEntry(newsItem, data);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to connect to ConsentAI.",
-      );
-    } finally {
-      setLoading(false);
-    }
+    setSubmitted(true);
+    await handleAnalyzeWithQuery(newsItem);
   };
 
   return (
@@ -570,5 +586,13 @@ export default function ArenaPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ArenaPage() {
+  return (
+    <Suspense>
+      <ArenaContent />
+    </Suspense>
   );
 }

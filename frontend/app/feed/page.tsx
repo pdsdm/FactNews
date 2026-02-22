@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Newspaper, RefreshCw, Search, ChevronDown } from "lucide-react";
+import { Newspaper, RefreshCw, Zap, ChevronDown, Crown } from "lucide-react";
 import Image from "next/image";
 import { basepath } from "../env";
 
@@ -226,7 +226,7 @@ function ArticleCard({
         )}
 
         {/* Actions row — pinned to bottom */}
-        <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-stretch justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1 flex-wrap">
             {(article.sources_referenced ?? [])
               .slice(0, srcLimit)
@@ -245,23 +245,23 @@ function ArticleCard({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-stretch gap-2">
             <button
               onClick={() =>
                 router.push(`/search?q=${encodeURIComponent(headline)}`)
               }
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
             >
-              <Search className="w-3 h-3" />
+              <Zap className="w-4 h-4" />
               Fast Check
             </button>
             <button
               onClick={() =>
-                router.push(`/council?q=${encodeURIComponent(headline)}`)
+                router.push(`/arena?q=${encodeURIComponent(headline)}`)
               }
-              className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
             >
-              <Newspaper className="w-3 h-3" />
+              <Crown className="w-4 h-4" />
               Council
             </button>
           </div>
