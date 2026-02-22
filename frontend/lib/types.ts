@@ -98,6 +98,41 @@ export interface Bookmark {
   response: ConsensusResponse;
   savedAt: number;
   note?: string;
+  mode?: "fast" | "consensus";
+}
+
+/* ── Arena types ──────────────────────────────────────────────────── */
+export interface ArenaModelResult {
+  model: string;
+  model_id: string;
+  status: string;
+  latency_s: number;
+  rating: number;
+  answer: string | null;
+  error?: string;
+}
+
+export interface ArenaJudgeResult {
+  verdict: string;
+  best: string;
+  worst: string;
+  judge_model: string;
+}
+
+export interface ArenaResponse {
+  models: ArenaModelResult[];
+  judge: ArenaJudgeResult;
+  meta: { succeeded: number; failed: number; total: number };
+}
+
+export interface ArenaHistoryEntry {
+  id: string;
+  query: string;
+  timestamp: number;
+  response: ArenaResponse;
+  bestModel: string;
+  worstModel: string;
+  modelsCount: number;
 }
 
 export interface SearchHistoryEntry {
@@ -107,4 +142,8 @@ export interface SearchHistoryEntry {
   response: ConsensusResponse | null;
   consensusScore: number | null;
   factsCount: number;
+  mode?: "fast" | "consensus";
+  type?: "search";
 }
+
+export type HistoryEntry = SearchHistoryEntry | ArenaHistoryEntry;

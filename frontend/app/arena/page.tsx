@@ -14,8 +14,12 @@ import {
   Zap,
   BarChart3,
   Medal,
+  Bookmark,
+  BookmarkCheck,
 } from "lucide-react";
 import { basepath } from "../env";
+import { useSearchHistoryStore } from "@/stores/searchHistoryStore";
+import { useBookmarkStore } from "@/stores/bookmarkStore";
 
 const API = `http://${basepath}:8000`;
 
@@ -258,6 +262,11 @@ export default function ArenaPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const addArenaEntry = useSearchHistoryStore((s) => s.addArenaEntry);
+  const addArenaBookmark = useBookmarkStore((s) => s.addArenaBookmark);
+  const isArenaBookmarked = useBookmarkStore((s) => s.isArenaBookmarked);
+  const removeArenaBookmark = useBookmarkStore((s) => s.removeArenaBookmark);
+  const arenaBookmarks = useBookmarkStore((s) => s.arenaBookmarks);
 
   // Scroll to results when they arrive
   useEffect(() => {
@@ -282,6 +291,8 @@ export default function ArenaPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
       setResult(data);
+      // Auto-save to history
+      addArenaEntry(newsItem, data);
     } catch (err) {
       setError(
         err instanceof Error
@@ -577,6 +588,42 @@ export default function ArenaPage() {
 
           {/* Bar chart */}
           <BarChartSection models={result.models} />
+
+          {/* Bookmark button */}
+          {(() => {
+            const saved = isArenaBookmarked(newsItem);
+            return (
+              <div className="flex justify-center pt-2 pb-4">
+                <button
+                  onClick={() => {
+                    if (saved) {
+                      const bm = arenaBookmarks.find(
+                        (b) => b.query === newsItem,
+                      );
+                      if (bm) removeArenaBookmark(bm.id);
+                    } else {
+                      addArenaBookmark(newsItem, result);
+                    }
+                  }}
+                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm ${
+                    saved
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-400 dark:border-emerald-800"
+                      : "bg-white text-slate-700 border border-slate-200 hover:border-emerald-300 hover:text-emerald-700 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 dark:hover:border-emerald-700"
+                  }`}
+                >
+                  {saved ? (
+                    <>
+                      <BookmarkCheck className="w-4 h-4" /> Bookmarked
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="w-4 h-4" /> Save to Bookmarks
+                    </>
+                  )}
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

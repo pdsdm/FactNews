@@ -25,7 +25,7 @@ function SearchContent() {
       setSubmitted(true);
       const mode = consensusMode ? "consensus" : "fast";
       ask(q, mode).then((result) => {
-        if (result) addEntry(q, result);
+        if (result) addEntry(q, result, mode);
       });
     }
   }, [searchParams, submitted, ask, addEntry, consensusMode]);
@@ -35,7 +35,7 @@ function SearchContent() {
     if (!question.trim()) return;
     const mode = consensusMode ? "consensus" : "fast";
     const result = await ask(question, mode);
-    addEntry(question, result);
+    addEntry(question, result, mode);
   };
 
   return (
