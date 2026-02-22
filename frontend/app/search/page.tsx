@@ -16,7 +16,7 @@ function SearchContent() {
   const { response, loading, error, streamStatus, ask } = useConsensus();
   const addEntry = useSearchHistoryStore((s) => s.addEntry);
   const [submitted, setSubmitted] = useState(false);
-  const [consensusMode, setConsensusMode] = useState(true);
+  const [consensusMode, setConsensusMode] = useState(false);
 
   useEffect(() => {
     const q = searchParams.get("q");

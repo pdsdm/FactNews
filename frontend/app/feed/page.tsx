@@ -253,7 +253,7 @@ function ArticleCard({
               className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
             >
               <Zap className="w-4 h-4" />
-              Fast Check
+              Check
             </button>
             <button
               onClick={() =>
