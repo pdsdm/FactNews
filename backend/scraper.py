@@ -3,6 +3,11 @@ import requests
 from newspaper import Article
 from typing import Optional
 import time
+import signal
+
+# Timeout decorator for individual scrape attempts
+class _ScrapeTimeout(Exception):
+    pass
 
 class FullArticleScraper:
     """Scrapes full article content from URLs"""
@@ -14,15 +19,25 @@ class FullArticleScraper:
     def scrape_with_trafilatura(self, url: str) -> Optional[str]:
         """Try scraping with trafilatura (fast and reliable)"""
         try:
-            downloaded = trafilatura.fetch_url(url)
-            if downloaded:
-                text = trafilatura.extract(
-                    downloaded,
-                    include_comments=False,
-                    include_tables=False,
-                    no_fallback=False
-                )
-                return text
+            # Use requests with explicit timeout first, then extract
+            resp = requests.get(
+                url,
+                timeout=self.timeout,
+                headers={"User-Agent": self.user_agent},
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+            text = trafilatura.extract(
+                resp.text,
+                include_comments=False,
+                include_tables=False,
+                no_fallback=True,  # avoid slow fallback parsers
+            )
+            return text
+        except requests.exceptions.Timeout:
+            print(f"    ⏱️  Trafilatura timeout ({self.timeout}s): {url[:60]}")
+        except requests.exceptions.ConnectionError:
+            print(f"    ⚠️  Connection error: {url[:60]}")
         except Exception as e:
             print(f"    ⚠️  Trafilatura failed: {str(e)[:50]}")
         return None
@@ -30,7 +45,7 @@ class FullArticleScraper:
     def scrape_with_newspaper(self, url: str) -> Optional[str]:
         """Try scraping with newspaper3k (good for news sites)"""
         try:
-            article = Article(url)
+            article = Article(url, request_timeout=self.timeout)
             article.download()
             article.parse()
             
@@ -42,18 +57,18 @@ class FullArticleScraper:
     
     def scrape_full_article(self, url: str) -> Optional[str]:
         """
-        Scrape full article content using multiple methods
-        Returns the full text or None if all methods fail
+        Scrape full article content using multiple methods.
+        Each method has its own timeout so nothing hangs.
         """
-        # Method 1: Trafilatura (fastest)
+        # Method 1: Trafilatura with requests (has timeout)
         content = self.scrape_with_trafilatura(url)
         if content and len(content) > 500:
-            return content  # FULL CONTENT, no limit
+            return content
         
-        # Method 2: Newspaper3k (more robust for news)
+        # Method 2: Newspaper3k (has timeout via request_timeout)
         content = self.scrape_with_newspaper(url)
         if content and len(content) > 500:
-            return content  # FULL CONTENT, no limit
+            return content
         
         return None
 

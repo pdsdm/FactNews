@@ -2,13 +2,19 @@ import feedparser
 import json
 import hashlib
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from datetime import datetime, timedelta
 from typing import List, Dict
 from bs4 import BeautifulSoup
 import re
 import time
 from scraper import enrich_article_content
+
+# Timeouts (seconds)
+FEED_FETCH_TIMEOUT = 15       # max time to download an RSS feed
+PER_SOURCE_SCRAPE_TIMEOUT = 45  # max total time scraping articles from one source
+GLOBAL_FETCH_TIMEOUT = 120     # max total time for all sources combined
 
 # RSS Feeds - Top 10 English News Sources
 RSS_FEEDS = {
@@ -89,7 +95,22 @@ class RSSIngester:
         
         try:
             print(f"📡 Fetching {source}...")
-            feed = feedparser.parse(url)
+            # Fetch feed with explicit timeout (feedparser.parse has no timeout)
+            try:
+                resp = requests.get(url, timeout=FEED_FETCH_TIMEOUT, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; FactNews/1.0)"
+                })
+                resp.raise_for_status()
+                feed = feedparser.parse(resp.content)
+            except requests.exceptions.Timeout:
+                print(f"  ⏱️  {source}: RSS feed timeout ({FEED_FETCH_TIMEOUT}s)")
+                return []
+            except requests.exceptions.RequestException as e:
+                print(f"  ❌ {source}: RSS fetch failed: {str(e)[:60]}")
+                return []
+            except Exception:
+                # Fallback to feedparser direct (some feeds need special handling)
+                feed = feedparser.parse(url)
             
             for entry in feed.entries[:50]:  # Check up to 50 entries
                 article_date = self.parse_date(entry)
@@ -129,16 +150,32 @@ class RSSIngester:
                 if len(raw_articles) >= 20:
                     break
             
-            # Scrape full content in parallel (4 threads per source)
+            # Scrape full content in parallel (4 threads per source, with timeout)
             if scrape_full and raw_articles:
                 enriched: List[Dict] = []
                 with ThreadPoolExecutor(max_workers=4) as pool:
                     futures = {pool.submit(enrich_article_content, a): i for i, a in enumerate(raw_articles)}
-                    for f in as_completed(futures):
-                        try:
-                            enriched.append(f.result())
-                        except Exception as e:
-                            print(f"    ⚠️  Enrich failed: {e}")
+                    try:
+                        for f in as_completed(futures, timeout=PER_SOURCE_SCRAPE_TIMEOUT):
+                            try:
+                                enriched.append(f.result(timeout=5))
+                            except Exception as e:
+                                print(f"    ⚠️  Enrich failed: {e}")
+                    except TimeoutError:
+                        # Cancel remaining futures and keep what we have
+                        pending = sum(1 for ft in futures if not ft.done())
+                        for ft in futures:
+                            ft.cancel()
+                        print(f"  ⏱️  {source}: scrape timeout after {PER_SOURCE_SCRAPE_TIMEOUT}s ({pending} articles skipped)")
+                        # Collect any that finished before timeout
+                        for ft in futures:
+                            if ft.done() and not ft.cancelled():
+                                try:
+                                    result = ft.result(timeout=0)
+                                    if result not in enriched:
+                                        enriched.append(result)
+                                except Exception:
+                                    pass
                 raw_articles = enriched
             
             print(f"  ✅ {source}: {len(raw_articles)} artículos")
@@ -167,7 +204,7 @@ class RSSIngester:
         return self.articles
     
     def _parallel_fetch(self, feeds: List[tuple], scrape_full: bool = True, days_back: int = 4):
-        """Scrape multiple feeds concurrently."""
+        """Scrape multiple feeds concurrently with global timeout."""
         start = time.time()
         workers = min(8, len(feeds))  # up to 8 feeds at once
         results: List[Dict] = []
@@ -176,13 +213,28 @@ class RSSIngester:
                 pool.submit(self.fetch_feed, name, url, scrape_full, days_back): name
                 for name, url in feeds
             }
-            for future in as_completed(futures):
-                name = futures[future]
-                try:
-                    arts = future.result()
-                    results.extend(arts)
-                except Exception as e:
-                    print(f"  ❌ {name} failed: {e}")
+            try:
+                for future in as_completed(futures, timeout=GLOBAL_FETCH_TIMEOUT):
+                    name = futures[future]
+                    try:
+                        arts = future.result(timeout=5)
+                        results.extend(arts)
+                    except Exception as e:
+                        print(f"  ❌ {name} failed: {e}")
+            except TimeoutError:
+                pending = [futures[f] for f in futures if not f.done()]
+                for f in futures:
+                    f.cancel()
+                print(f"  ⏱️  Global timeout ({GLOBAL_FETCH_TIMEOUT}s) — skipped: {', '.join(pending)}")
+                # Collect completed results
+                for f, name in futures.items():
+                    if f.done() and not f.cancelled():
+                        try:
+                            arts = f.result(timeout=0)
+                            if arts:
+                                results.extend(arts)
+                        except Exception:
+                            pass
         self.articles = results
         elapsed = time.time() - start
         print(f"\n⚡ Parallel fetch done: {len(self.articles)} articles in {elapsed:.1f}s")
