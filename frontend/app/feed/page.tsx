@@ -6,7 +6,6 @@ import { Newspaper, RefreshCw, Search, ChevronDown } from "lucide-react";
 import { basepath } from "../env";
 
 const API = `http://${basepath}:8000`;
-const UNSPLASH_ACCESS_KEY = "WE0D0lKqJVSXlEf01tYQdXAUmXkZBewYfILxPFUAhXc"; // Free tier key
 const ARTICLES_PER_PAGE = 12;
 
 /* ── Types ─────────────────────────────────────────────────────────── */
@@ -270,7 +269,6 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(ARTICLES_PER_PAGE);
-  const [, forceUpdate] = useState({});
   const imageCacheRef = useRef<Record<string, string>>({});
   const imageLoadingRef = useRef<Set<string>>(new Set());
 
@@ -290,32 +288,18 @@ export default function FeedPage() {
       imageLoadingRef.current.add(cacheKey);
 
       try {
-        const query = article.category || "news";
-        console.log(`Fetching image for category: ${query}`);
-        const response = await fetch(
-          `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape`,
-          { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` } },
+        // Use Lorem Picsum as a reliable fallback (no API key needed)
+        // Generate a unique seed from the article headline for consistent images
+        const seed = encodeURIComponent(
+          article.headline.substring(0, 30).replace(/[^a-zA-Z0-9]/g, "-"),
         );
+        const imageUrl = `https://picsum.photos/seed/${seed}/800/600`;
 
-        console.log(`Unsplash response status: ${response.status}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          const imageUrl = data.urls.regular;
-
-          console.log(
-            `Image fetched successfully: ${imageUrl.substring(0, 50)}...`,
-          );
-
-          // Cache in memory
-          imageCacheRef.current[cacheKey] = imageUrl;
-          return imageUrl;
-        } else {
-          const errorText = await response.text();
-          console.warn(`Unsplash API error: ${response.status}`, errorText);
-        }
+        // Cache in memory
+        imageCacheRef.current[cacheKey] = imageUrl;
+        return imageUrl;
       } catch (err) {
-        console.error("Failed to fetch image:", err);
+        console.error("Failed to generate image:", err);
       } finally {
         imageLoadingRef.current.delete(cacheKey);
       }
@@ -342,12 +326,16 @@ export default function FeedPage() {
         const articlesWithImages = await Promise.all(
           data.articles.map(async (article) => {
             const imageUrl = await fetchImage(article);
-            console.log(`Article "${article.headline.substring(0, 30)}..." has image: ${imageUrl ? 'YES' : 'NO'}`);
+            console.log(
+              `Article "${article.headline.substring(0, 30)}..." has image: ${imageUrl ? "YES" : "NO"}`,
+            );
             return { ...article, image_url: imageUrl };
           }),
         );
-        
-        console.log(`Total articles: ${articlesWithImages.length}, With images: ${articlesWithImages.filter(a => a.image_url).length}`);
+
+        console.log(
+          `Total articles: ${articlesWithImages.length}, With images: ${articlesWithImages.filter((a) => a.image_url).length}`,
+        );
 
         setEdition({ ...data, articles: articlesWithImages });
       } catch (err) {
