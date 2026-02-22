@@ -236,9 +236,7 @@ async def _run_ingestion(max_feeds: int | None, scrape_full: bool, days_back: in
     logger.info("Starting RSS ingestion...")
     
     try:
-        loop = asyncio.get_event_loop()
-        stats = await loop.run_in_executor(
-            None,
+        stats = await asyncio.to_thread(
             lambda: ingest_news(max_feeds=max_feeds, scrape_full=scrape_full, days_back=days_back),
         )
         
@@ -449,9 +447,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 1. Parallel chunk search - run in thread pool to avoid blocking
             search_start = time.time()
-            loop = asyncio.get_event_loop()
-            relevant_chunks = await loop.run_in_executor(
-                None, 
+            relevant_chunks = await asyncio.to_thread(
                 _chunk_rag.search_chunks, 
                 request.question, 
                 30
@@ -469,8 +465,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 2. Get diverse chunks - also in parallel
             diversity_start = time.time()
-            diverse_chunks = await loop.run_in_executor(
-                None,
+            diverse_chunks = await asyncio.to_thread(
                 _chunk_rag.get_diverse_chunks,
                 relevant_chunks,
                 12
@@ -483,8 +478,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             # 3. Generate answer with streaming
             llm_start = time.time()
-            llm_response = await loop.run_in_executor(
-                None,
+            llm_response = await asyncio.to_thread(
                 _chunk_rag.generate_answer,
                 request.question,
                 diverse_chunks
@@ -623,10 +617,8 @@ async def add_source(req: AddSourceRequest):
 
     # Scrape articles from the new source
     try:
-        loop = asyncio.get_event_loop()
         ingester = RSSIngester()
-        articles = await loop.run_in_executor(
-            None,
+        articles = await asyncio.to_thread(
             ingester.fetch_feed,
             name,
             rss_url,
