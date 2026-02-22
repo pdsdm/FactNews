@@ -38,6 +38,7 @@ class OptimizedChunkRAG:
         self.chunker = ArticleChunker(chunk_size=300, overlap_sentences=1)
         self.embeddings_file = embeddings_file
         self.embedding_cache = EmbeddingCache(lru_size=1000)
+        self.articles = articles  # Store articles for /articles endpoint
         
         # Auto-detect available providers from .env API keys
         available = [name for name, cfg in PROVIDERS.items()
