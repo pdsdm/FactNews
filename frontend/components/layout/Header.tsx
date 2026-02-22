@@ -29,7 +29,7 @@ const LEFT = [
 ] as const;
 
 const RIGHT = [
-  { href: "/arena", label: "ConsentAI", icon: "Users" },
+  { href: "/arena", label: "Council", icon: "Users" },
 
   { href: "/sources", label: "Sources", icon: "Globe" },
   { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },

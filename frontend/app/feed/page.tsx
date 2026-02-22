@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Newspaper, RefreshCw, Search, ChevronDown } from "lucide-react";
+import Image from "next/image";
 import { basepath } from "../env";
 
 const API = `http://${basepath}:8000`;
@@ -414,6 +415,21 @@ export default function FeedPage() {
 
   return (
     <div className="min-h-screen pb-20">
+      {/* ── Masthead ──────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 pt-10 pb-6 text-center">
+        <Image
+          src="/llm-council.png"
+          alt="LLM Council"
+          width={480}
+          height={345}
+          className="mx-auto"
+          priority
+        />
+        <p className="mt-3 text-sm font-medium tracking-widest uppercase text-slate-400 dark:text-slate-500">
+          Don&apos;t trust, verify.
+        </p>
+      </div>
+
       {/* ── Edition info bar ──────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6 pt-6 pb-4">
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">

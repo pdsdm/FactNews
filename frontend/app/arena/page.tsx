@@ -17,6 +17,7 @@ import {
   Bookmark,
   BookmarkCheck,
 } from "lucide-react";
+import Image from "next/image";
 import { basepath } from "../env";
 import { useSearchHistoryStore } from "@/stores/searchHistoryStore";
 import { useBookmarkStore } from "@/stores/bookmarkStore";
@@ -309,11 +310,16 @@ export default function ArenaPage() {
     <div className="min-h-screen pb-20">
       {/* ── Hero ────────────────────────────────────────────────── */}
       <div className="max-w-4xl mx-auto px-6 pt-14 pb-10 text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 mb-5 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-lg shadow-slate-900/20">
-          <Users className="w-7 h-7 text-white" />
-        </div>
+        <Image
+          src="/llm-council.png"
+          alt="LLM Council"
+          width={220}
+          height={160}
+          className="mx-auto mb-5"
+          priority
+        />
         <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-3 leading-tight font-times-new-roman">
-          <span className="text-slate-800 dark:text-slate-300">ConsentAI</span>
+          <span className="text-slate-800 dark:text-slate-300">Council</span>
         </h1>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto text-base">
           Six frontier models compete. An anonymous judge scores the truth.
