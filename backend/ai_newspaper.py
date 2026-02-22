@@ -149,6 +149,7 @@ def generate_newspaper_edition(
     print(f"  📊 {len(clusters)} total clusters → {len(top_clusters)} selected stories")
 
     # 2. Generate an article for each cluster
+    REQUIRED_FIELDS = {"headline", "summary", "body", "sources_referenced", "category"}
     generated: list[Dict] = []
     for i, cluster in enumerate(top_clusters):
         topic = cluster["representative_title"]
@@ -157,7 +158,7 @@ def generate_newspaper_edition(
         context = _build_context_from_cluster(cluster, chunk_rag)
         article = _generate_article(topic, context, provider)
 
-        if article:
+        if article and REQUIRED_FIELDS.issubset(article.keys()) and article.get("headline") and article.get("body"):
             article["source_count"] = cluster["unique_sources"]
             article["cluster_size"] = cluster["article_count"]
             article["original_urls"] = cluster.get("urls", [])[:5]
