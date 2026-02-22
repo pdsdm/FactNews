@@ -144,24 +144,18 @@ function ArticleCard({
 
   return (
     <article
-      className={`group h-full flex flex-col bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md ${
+      className={`group h-full flex ${isMid ? "flex-col" : isLarge ? "flex-row" : "flex-col"} bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md ${
         isLarge ? "rounded-2xl" : isMid ? "rounded-xl" : "rounded-xl"
       }`}
     >
-      {/* Image */}
-      {imageUrl && (
-        <div
-          className={`relative overflow-hidden ${
-            isLarge ? "h-80" : isMid ? "h-56" : "h-40"
-          }`}
-        >
+      {/* Image for mid size (top) */}
+      {isMid && imageUrl && (
+        <div className="relative overflow-hidden h-56">
           <img
             src={imageUrl}
             alt={headline}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-          {/* Category overlay */}
           {category && (
             <span
               className={`absolute top-3 left-3 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
@@ -173,8 +167,10 @@ function ArticleCard({
       )}
 
       {/* Content */}
-      <div className={isLarge ? "p-6 md:p-8" : isMid ? "p-5 md:p-6" : "p-4"}>
-        {/* Category + sources (only if no image) */}
+      <div
+        className={`flex-1 flex flex-col ${isLarge ? "p-6 md:p-8" : isMid ? "p-5 md:p-6" : "p-4"}`}
+      >
+        {/* Category + sources */}
         {!imageUrl && (
           <div className="flex items-center gap-2 mb-2">
             {category && (
@@ -259,6 +255,24 @@ function ArticleCard({
           </button>
         </div>
       </div>
+
+      {/* Image for large size (right side) */}
+      {isLarge && imageUrl && (
+        <div className="relative overflow-hidden w-80">
+          <img
+            src={imageUrl}
+            alt={headline}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          {category && (
+            <span
+              className={`absolute top-3 right-3 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
+            >
+              {category}
+            </span>
+          )}
+        </div>
+      )}
     </article>
   );
 }
