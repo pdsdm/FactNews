@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Bookmark, BookmarkCheck } from "lucide-react";
 import { useBookmarkStore } from "@/stores/bookmarkStore";
 import type { ConsensusResponse } from "@/lib/types";
@@ -10,14 +11,26 @@ interface BookmarkButtonProps {
 }
 
 export function BookmarkButton({ query, response }: BookmarkButtonProps) {
-  const { isBookmarked, addBookmark, removeByQuery } = useBookmarkStore();
-  const saved = isBookmarked(query);
+  const saved = useBookmarkStore((s) =>
+    s.bookmarks.some((b) => b.query === query),
+  );
+  const addBookmark = useBookmarkStore((s) => s.addBookmark);
+  const removeByQuery = useBookmarkStore((s) => s.removeByQuery);
+
+  const [justSaved, setJustSaved] = useState(false);
+
+  useEffect(() => {
+    if (!justSaved) return;
+    const t = setTimeout(() => setJustSaved(false), 2000);
+    return () => clearTimeout(t);
+  }, [justSaved]);
 
   const toggle = () => {
     if (saved) {
       removeByQuery(query);
     } else {
       addBookmark(query, response);
+      setJustSaved(true);
     }
   };
 
@@ -33,7 +46,7 @@ export function BookmarkButton({ query, response }: BookmarkButtonProps) {
       {saved ? (
         <>
           <BookmarkCheck className="w-4 h-4" />
-          Saved
+          {justSaved ? "Saved!" : "Saved"}
         </>
       ) : (
         <>

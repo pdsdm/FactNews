@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use, Suspense } from "react";
+import { useState, useEffect, useRef, use, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, RefreshCw } from "lucide-react";
@@ -24,21 +24,25 @@ function TopicContent({ params }: TopicPageProps) {
   const historyEntry = useSearchHistoryStore((s) => s.getEntry(id));
   const bookmarkEntry = useBookmarkStore((s) => s.getBookmark(id));
 
+  // Snapshot the first valid data so the page stays visible if the user
+  // unsaves/removes the entry while viewing it.
+  const snapshotRef = useRef<{ query: string; response: ConsensusResponse } | null>(null);
+
+  if (mounted && !snapshotRef.current) {
+    if (source === "bookmarks" && bookmarkEntry) {
+      snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
+    } else if (historyEntry) {
+      snapshotRef.current = { query: historyEntry.query, response: historyEntry.response };
+    } else if (bookmarkEntry) {
+      snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
+    }
+  }
+
   if (!mounted) return null;
 
-  let query: string;
-  let response: ConsensusResponse | null;
+  const pageData = snapshotRef.current;
 
-  if (source === "bookmarks" && bookmarkEntry) {
-    query = bookmarkEntry.query;
-    response = bookmarkEntry.response;
-  } else if (historyEntry) {
-    query = historyEntry.query;
-    response = historyEntry.response;
-  } else if (bookmarkEntry) {
-    query = bookmarkEntry.query;
-    response = bookmarkEntry.response;
-  } else {
+  if (!pageData) {
     return (
       <div className="min-h-screen">
         <div className="max-w-5xl mx-auto px-6 pt-10">
@@ -61,6 +65,8 @@ function TopicContent({ params }: TopicPageProps) {
       </div>
     );
   }
+
+  const { query, response } = pageData;
 
   return (
     <div className="min-h-screen">

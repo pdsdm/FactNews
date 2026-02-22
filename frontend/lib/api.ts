@@ -67,3 +67,36 @@ export async function searchPreview(question: string): Promise<SearchPreviewResp
   }
   return res.json();
 }
+
+export async function getSources(): Promise<{ name: string; url: string; custom: boolean }[]> {
+  const res = await fetch(`${API}/sources`);
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  const data = await res.json();
+  return data.sources ?? data;
+}
+
+export async function addSource(
+  name: string,
+  url: string,
+): Promise<{ message?: string; articles_added?: number }> {
+  const res = await fetch(`${API}/sources`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, url }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function removeSource(name: string): Promise<void> {
+  const res = await fetch(`${API}/sources/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Error ${res.status}`);
+  }
+}
