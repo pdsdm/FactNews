@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   allowedDevOrigins: ["100.98.98.88"],
   reactCompiler: true,
+  devIndicators: false,
 };
 
 export default nextConfig;

@@ -534,7 +534,11 @@ export default function FeedPage() {
 
             return (
               <div key={article.headline || `v-${i}`} className={span}>
-                <ArticleCard article={article} size={cardSize} showImage={hasPhoto} />
+                <ArticleCard
+                  article={article}
+                  size={cardSize}
+                  showImage={hasPhoto}
+                />
               </div>
             );
           })}
