@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Newspaper, RefreshCw, Zap, ChevronDown, Crown } from "lucide-react";
+import {
+  Newspaper,
+  RefreshCw,
+  Zap,
+  ChevronDown,
+  Crown,
+  Loader2,
+} from "lucide-react";
 import Image from "next/image";
 import { basepath } from "../env";
 
@@ -226,7 +233,7 @@ function ArticleCard({
         )}
 
         {/* Actions row — pinned to bottom */}
-        <div className="flex items-stretch justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row items-stretch gap-2 mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1 flex-wrap">
             {(article.sources_referenced ?? [])
               .slice(0, srcLimit)
@@ -245,12 +252,12 @@ function ArticleCard({
             )}
           </div>
 
-          <div className="flex items-stretch gap-2">
+          <div className="flex items-stretch gap-2 shrink-0">
             <button
               onClick={() =>
                 router.push(`/search?q=${encodeURIComponent(headline)}`)
               }
-              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
             >
               <Zap className="w-4 h-4" />
               Check
@@ -259,7 +266,7 @@ function ArticleCard({
               onClick={() =>
                 router.push(`/arena?q=${encodeURIComponent(headline)}`)
               }
-              className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 transition-all"
             >
               <Crown className="w-4 h-4" />
               Council
@@ -297,6 +304,31 @@ export default function FeedPage() {
   const [visibleCount, setVisibleCount] = useState(ARTICLES_PER_PAGE);
   const imageCacheRef = useRef<Record<string, string>>({});
   const imageLoadingRef = useRef<Set<string>>(new Set());
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0];
+        if (first.isIntersecting) {
+          setVisibleCount((prev) => prev + ARTICLES_PER_PAGE);
+        }
+      },
+      { threshold: 0.1 },
+    );
+
+    const currentRef = loadMoreRef.current;
+    if (currentRef) {
+      observer.observe(currentRef);
+    }
+
+    return () => {
+      if (currentRef) {
+        observer.unobserve(currentRef);
+      }
+    };
+  }, []);
 
   // Fetch image from Unsplash based on article category/headline
   const fetchImage = useCallback(
@@ -420,10 +452,6 @@ export default function FeedPage() {
   const visibleArticles = allRemaining.slice(0, visibleCount - 4);
   const hasMore = allRemaining.length > visibleArticles.length;
 
-  const handleShowMore = () => {
-    setVisibleCount((prev) => prev + ARTICLES_PER_PAGE);
-  };
-
   return (
     <div className="min-h-screen pb-20">
       {/* ── Masthead ──────────────────────────────────────── */}
@@ -484,18 +512,13 @@ export default function FeedPage() {
           ))}
         </div>
 
-        {/* Show More Button */}
+        {/* Infinite scroll sentinel */}
         {hasMore && (
-          <div className="flex justify-center mt-8">
-            <button
-              onClick={handleShowMore}
-              className="flex items-center gap-2 px-6 py-3 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 transition-colors"
-            >
-              <ChevronDown className="w-4 h-4" />
-              Show More Articles ({allRemaining.length -
-                visibleArticles.length}{" "}
-              remaining)
-            </button>
+          <div ref={loadMoreRef} className="flex justify-center mt-8 py-4">
+            <div className="flex items-center gap-2 text-sm text-slate-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading more articles...
+            </div>
           </div>
         )}
       </div>
