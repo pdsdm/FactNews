@@ -9,12 +9,8 @@ import {
   History,
   Bookmark,
   Swords,
-  RefreshCw,
+  TrendingUp,
 } from "lucide-react";
-import { NAV_ITEMS } from "@/lib/constants";
-import { ThemeToggle } from "./ThemeToggle";
-import { useStats } from "@/hooks/useStats";
-import { useRefresh } from "@/hooks/useRefresh";
 
 const iconMap = {
   Newspaper,
@@ -23,67 +19,90 @@ const iconMap = {
   History,
   Bookmark,
   Swords,
+  TrendingUp,
 } as const;
+
+const LEFT = [
+  { href: "/search", label: "Search", icon: "Search" },
+  { href: "/sources", label: "Sources", icon: "Globe" },
+  { href: "/history", label: "History", icon: "History" },
+] as const;
+
+const CENTER = { href: "/feed", label: "Feed", icon: "Newspaper" } as const;
+
+const RIGHT = [
+  { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
+  { href: "/arena", label: "Arena", icon: "Swords" },
+  { href: "/trending", label: "Trending", icon: "TrendingUp" },
+] as const;
+
+function NavLink({
+  href,
+  label,
+  icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: string;
+  active: boolean;
+}) {
+  const Icon = iconMap[icon as keyof typeof iconMap];
+  return (
+    <Link
+      href={href}
+      className={`relative flex flex-col items-center justify-center gap-0.5 w-20 py-2 transition-colors ${
+        active ? "text-slate-900" : "text-slate-400 hover:text-slate-700"
+      }`}
+    >
+      <Icon className="w-4 h-4" />
+      <span className="text-[11px] font-medium">{label}</span>
+      {active && (
+        <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-slate-900 rounded-full" />
+      )}
+    </Link>
+  );
+}
 
 export function Header() {
   const pathname = usePathname();
-  const { stats, refresh: refreshStats } = useStats();
-  const { refreshing, refresh: refreshNews } = useRefresh(refreshStats);
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-md dark:border-slate-800 dark:bg-slate-950/80">
-      <div className="max-w-[1400px] mx-auto px-6 flex items-center h-14 gap-8">
-        {/* Logo */}
-        <Link href="/feed" className="flex items-center gap-2 shrink-0">
-          <div className="w-6 h-6 bg-slate-900 rounded dark:bg-white" />
-          <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-            FactNews
-          </span>
-        </Link>
-
-        {/* Nav links */}
-        <nav className="flex items-center gap-1">
-          {NAV_ITEMS.map((item) => {
-            const Icon = iconMap[item.icon as keyof typeof iconMap];
-            const isActive = pathname.startsWith(item.href);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800/50"
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-                <span className="hidden lg:inline">{item.label}</span>
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Right side — stats, theme, refresh */}
-        <div className="ml-auto flex items-center gap-2">
-          {stats && (
-            <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline">
-              {stats.articles_indexed} articles &middot; {stats.sources} sources
-            </span>
-          )}
-          <ThemeToggle />
-          <button
-            onClick={refreshNews}
-            disabled={refreshing}
-            title="Refresh news"
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
-          >
-            <RefreshCw
-              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+    <header className="fixed top-0 left-0 right-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+      <div className="flex items-center justify-center h-14">
+        <nav className="flex items-center">
+          {/* Left group */}
+          {LEFT.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={pathname.startsWith(item.href)}
             />
-          </button>
-        </div>
+          ))}
+
+          {/* Center — Feed */}
+          <NavLink
+            href={CENTER.href}
+            label={CENTER.label}
+            icon={CENTER.icon}
+            active={pathname === "/" || pathname.startsWith("/feed")}
+          />
+
+          {/* Right group */}
+          {RIGHT.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              label={item.label}
+              icon={item.icon}
+              active={pathname.startsWith(item.href)}
+            />
+          ))}
+        </nav>
       </div>
     </header>
   );
 }
+

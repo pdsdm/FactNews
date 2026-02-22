@@ -1,10 +1,11 @@
 export const NAV_ITEMS = [
-  { href: "/feed", label: "Feed", icon: "Newspaper" },
   { href: "/search", label: "Search", icon: "Search" },
   { href: "/sources", label: "Sources", icon: "Globe" },
   { href: "/history", label: "History", icon: "History" },
+  { href: "/feed", label: "Feed", icon: "Newspaper" },
   { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
   { href: "/arena", label: "Arena", icon: "Swords" },
+  { href: "/trending", label: "Trending", icon: "TrendingUp" },
 ] as const;
 
 export const BOOKMARKS_MAX = 100;

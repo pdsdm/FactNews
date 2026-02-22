@@ -26,15 +26,27 @@ function TopicContent({ params }: TopicPageProps) {
 
   // Snapshot the first valid data so the page stays visible if the user
   // unsaves/removes the entry while viewing it.
-  const snapshotRef = useRef<{ query: string; response: ConsensusResponse } | null>(null);
+  const snapshotRef = useRef<{
+    query: string;
+    response: ConsensusResponse;
+  } | null>(null);
 
   if (mounted && !snapshotRef.current) {
     if (source === "bookmarks" && bookmarkEntry) {
-      snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
+      snapshotRef.current = {
+        query: bookmarkEntry.query,
+        response: bookmarkEntry.response,
+      };
     } else if (historyEntry?.response) {
-      snapshotRef.current = { query: historyEntry.query, response: historyEntry.response };
+      snapshotRef.current = {
+        query: historyEntry.query,
+        response: historyEntry.response,
+      };
     } else if (bookmarkEntry) {
-      snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
+      snapshotRef.current = {
+        query: bookmarkEntry.query,
+        response: bookmarkEntry.response,
+      };
     }
   }
 
