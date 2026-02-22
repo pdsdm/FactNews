@@ -362,7 +362,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 <div align="center">
 
-**Built with purpose during Hackathon 2025**
+**Built with purpose during HackEurpoe 2026**
 
 *"In a world of noise, find the consensus."*
 
