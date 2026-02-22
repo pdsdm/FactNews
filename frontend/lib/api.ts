@@ -100,3 +100,44 @@ export async function removeSource(name: string): Promise<void> {
     throw new Error(data.detail || `Error ${res.status}`);
   }
 }
+
+export interface CatalogSource {
+  name: string;
+  rss_url: string;
+}
+
+export interface CatalogCountry {
+  code: string;
+  name: string;
+  flag: string;
+  sources: CatalogSource[];
+}
+
+export async function fetchSourcesCatalog(): Promise<CatalogCountry[]> {
+  const res = await fetch(`${API}/sources/catalog`);
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  const data = await res.json();
+  return data.countries;
+}
+
+export async function fetchSelectedSources(): Promise<string[]> {
+  const res = await fetch(`${API}/sources/selected`);
+  if (!res.ok) throw new Error(`Error ${res.status}`);
+  const data = await res.json();
+  return data.selected;
+}
+
+export async function saveSelectedSources(
+  sources: string[],
+): Promise<{ status: string; message: string; selected: string[] }> {
+  const res = await fetch(`${API}/sources/selected`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sources }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Error ${res.status}`);
+  }
+  return res.json();
+}
