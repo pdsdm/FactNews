@@ -75,3 +75,18 @@ export interface Suggestion {
   title: string;
   chunks: number;
 }
+
+export type Theme = "light" | "dark" | "system";
+
+export interface SearchPreviewResponse {
+  chunks: Array<{
+    chunk_id: string;
+    text: string;
+    source: string;
+    title: string;
+    date?: string;
+    similarity: number;
+  }>;
+  sources_analyzed: number;
+  chunks_used: number;
+}

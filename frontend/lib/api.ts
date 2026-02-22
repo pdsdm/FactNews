@@ -1,5 +1,5 @@
 import { basepath } from "@/app/env";
-import type { Stats, ArticlesResponse, Suggestion } from "./types";
+import type { Stats, ArticlesResponse, Suggestion, SearchPreviewResponse } from "./types";
 
 const API = `http://${basepath}:8000`;
 
@@ -53,4 +53,17 @@ export async function refreshNews(): Promise<void> {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || `Error ${res.status}`);
   }
+}
+
+export async function searchPreview(question: string): Promise<SearchPreviewResponse> {
+  const res = await fetch(`${API}/search/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Error ${res.status}`);
+  }
+  return res.json();
 }
