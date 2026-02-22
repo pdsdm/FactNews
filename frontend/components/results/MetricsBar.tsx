@@ -19,7 +19,9 @@ export function MetricsBar({ response }: MetricsBarProps) {
         : "text-emerald-600 dark:text-emerald-400";
 
   return (
-    <div className={`grid ${isFast ? "grid-cols-2" : "grid-cols-3"} gap-4 mb-8`}>
+    <div
+      className={`grid ${isFast ? "grid-cols-2" : "grid-cols-3"} gap-4 mb-8`}
+    >
       {!isFast && (
         <MetricCard
           label="Consensus Score"

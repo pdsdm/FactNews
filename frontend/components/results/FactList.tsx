@@ -18,7 +18,12 @@ export function FactList({ facts, mode }: FactListProps) {
       </h3>
       <div className="space-y-3">
         {facts.map((fact, idx) => (
-          <FactCard key={idx} fact={fact} index={idx} showConsensus={mode !== "fast"} />
+          <FactCard
+            key={idx}
+            fact={fact}
+            index={idx}
+            showConsensus={mode !== "fast"}
+          />
         ))}
       </div>
     </div>
