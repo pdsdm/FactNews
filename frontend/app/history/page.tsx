@@ -124,24 +124,25 @@ export default function HistoryPage() {
                         href={`/topic/${entry.id}`}
                         className="flex-1 min-w-0"
                       >
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm text-slate-900 truncate dark:text-slate-100">
-                            {entry.query}
-                          </p>
+                        <p className="font-medium text-sm text-slate-900 truncate dark:text-slate-100">
+                          {entry.query}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 dark:text-slate-400">
                           {/* Mode badge */}
                           {isFast ? (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800 flex-shrink-0">
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                               <Zap className="w-2.5 h-2.5" />
                               Fast
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 flex-shrink-0">
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                               <Users className="w-2.5 h-2.5" />
                               Consensus
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="text-slate-300 dark:text-slate-600">
+                            |
+                          </span>
                           <span>{timeAgo(entry.timestamp)}</span>
                           <span>&middot;</span>
                           <span>{entry.factsCount} facts</span>
