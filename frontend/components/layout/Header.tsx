@@ -8,7 +8,7 @@ import {
   Globe,
   History,
   Bookmark,
-  Swords,
+  Users,
   TrendingUp,
 } from "lucide-react";
 
@@ -18,7 +18,7 @@ const iconMap = {
   Globe,
   History,
   Bookmark,
-  Swords,
+  Users,
   TrendingUp,
 } as const;
 
@@ -29,7 +29,7 @@ const LEFT = [
 ] as const;
 
 const RIGHT = [
-  { href: "/arena", label: "Arena", icon: "Swords" },
+  { href: "/arena", label: "ConsentAI", icon: "Users" },
 
   { href: "/sources", label: "Sources", icon: "Globe" },
   { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },

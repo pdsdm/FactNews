@@ -70,7 +70,9 @@ export function SearchBar({
           type="button"
           onClick={() => onToggleMode(!consensusMode)}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-            consensusMode ? "bg-slate-900 dark:bg-slate-100" : "bg-slate-700 dark:bg-slate-500"
+            consensusMode
+              ? "bg-slate-900 dark:bg-slate-100"
+              : "bg-slate-700 dark:bg-slate-500"
           }`}
           role="switch"
           aria-checked={consensusMode}

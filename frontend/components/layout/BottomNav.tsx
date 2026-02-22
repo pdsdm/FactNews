@@ -8,7 +8,7 @@ import {
   Globe,
   History,
   Bookmark,
-  Swords,
+  Users,
   TrendingUp,
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/constants";
@@ -19,7 +19,7 @@ const iconMap = {
   Globe,
   History,
   Bookmark,
-  Swords,
+  Users,
   TrendingUp,
 } as const;
 

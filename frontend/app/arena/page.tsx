@@ -5,7 +5,7 @@ import {
   Send,
   Loader2,
   XCircle,
-  Swords,
+  Users,
   Trophy,
   Clock,
   Star,
@@ -297,7 +297,7 @@ export default function ArenaPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Failed to connect to the AI Arena.",
+          : "Failed to connect to ConsentAI.",
       );
     } finally {
       setLoading(false);
@@ -309,13 +309,10 @@ export default function ArenaPage() {
       {/* ── Hero ────────────────────────────────────────────────── */}
       <div className="max-w-4xl mx-auto px-6 pt-14 pb-10 text-center">
         <div className="inline-flex items-center justify-center w-14 h-14 mb-5 bg-slate-900 dark:bg-slate-800 rounded-2xl shadow-lg shadow-slate-900/20">
-          <Swords className="w-7 h-7 text-white" />
+          <Users className="w-7 h-7 text-white" />
         </div>
         <h1 className="text-4xl font-bold text-slate-900 dark:text-slate-100 mb-3 leading-tight font-times-new-roman">
-          LLM{" "}
-          <span className="text-slate-800 dark:text-slate-300">
-            Arena
-          </span>
+          <span className="text-slate-800 dark:text-slate-300">ConsentAI</span>
         </h1>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto text-base">
           Six frontier models compete. An anonymous judge scores the truth.
@@ -557,7 +554,7 @@ export default function ArenaPage() {
           <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-2xl p-6 shadow-sm dark:from-slate-900 dark:to-slate-900 dark:border-slate-800">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-900 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Swords className="w-5 h-5 text-white" />
+                <Users className="w-5 h-5 text-white" />
               </div>
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">

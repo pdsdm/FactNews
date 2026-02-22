@@ -7,7 +7,6 @@ import {
   X,
   Zap,
   Users,
-  Swords,
   Crown,
   ThumbsDown,
   Search,
@@ -43,7 +42,7 @@ export default function HistoryPage() {
               Search History
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              {entries.length} searches · {arenaEntries.length} arena battles
+              {entries.length} searches · {arenaEntries.length} ConsentAI battles
             </p>
           </div>
           {(entries.length > 0 || arenaEntries.length > 0) && (
@@ -55,7 +54,7 @@ export default function HistoryPage() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors dark:text-red-400 dark:hover:bg-red-950/30"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Clear {tab === "search" ? "All" : "Arena"}
+              Clear {tab === "search" ? "All" : "ConsentAI"}
             </button>
           )}
         </div>
@@ -86,8 +85,8 @@ export default function HistoryPage() {
                 : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300"
             }`}
           >
-            <Swords className="w-3.5 h-3.5" />
-            Arena
+            <Users className="w-3.5 h-3.5" />
+            ConsentAI
             {arenaEntries.length > 0 && (
               <span className="ml-1 px-1.5 py-0.5 text-[10px] font-semibold bg-slate-200 dark:bg-slate-600 rounded-full">
                 {arenaEntries.length}
@@ -171,19 +170,19 @@ export default function HistoryPage() {
           </>
         )}
 
-        {/* Arena History Tab */}
+        {/* ConsentAI History Tab */}
         {tab === "arena" && (
           <>
             {arenaEntries.length === 0 ? (
               <div className="text-center py-16">
                 <p className="text-slate-400 dark:text-slate-500">
-                  No arena battles yet.
+                  No ConsentAI battles yet.
                 </p>
                 <Link
                   href="/arena"
                   className="inline-block mt-4 px-5 py-2 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
                 >
-                  Go to Arena
+                  Go to ConsentAI
                 </Link>
               </div>
             ) : (
@@ -194,8 +193,8 @@ export default function HistoryPage() {
                     className="p-4 bg-white rounded-lg border border-slate-200 hover:shadow-sm transition-all dark:bg-slate-800 dark:border-slate-700"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
-                        <Swords className="w-4 h-4 text-white" />
+                      <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
+                        <Users className="w-4 h-4 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-slate-900 dark:text-slate-100 line-clamp-2">
@@ -209,7 +208,7 @@ export default function HistoryPage() {
                         {/* Best / Worst badges */}
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           {entry.bestModel && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800">
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-slate-200 text-slate-800 border border-slate-300 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600">
                               <Crown className="w-2.5 h-2.5" />
                               {entry.bestModel}
                             </span>
