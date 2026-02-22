@@ -308,6 +308,9 @@ export default function FeedPage() {
 
   // Infinite scroll observer
   useEffect(() => {
+    const element = loadMoreRef.current;
+    if (!element) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
@@ -315,20 +318,15 @@ export default function FeedPage() {
           setVisibleCount((prev) => prev + ARTICLES_PER_PAGE);
         }
       },
-      { threshold: 0.1 },
+      { threshold: 0.1, rootMargin: '100px' },
     );
 
-    const currentRef = loadMoreRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
+    observer.observe(element);
 
     return () => {
-      if (currentRef) {
-        observer.unobserve(currentRef);
-      }
+      observer.disconnect();
     };
-  }, []);
+  }, [edition]);
 
   // Fetch image from Unsplash based on article category/headline
   const fetchImage = useCallback(
@@ -434,7 +432,13 @@ export default function FeedPage() {
   if (!edition) return null;
 
   const validArticles = (edition.articles ?? []).filter(
-    (a) => a && a.headline && a.body,
+    (a) => {
+      // Filter out articles with missing critical fields
+      if (!a) return false;
+      if (!a.headline || a.headline.trim().length === 0) return false;
+      if (!a.body || a.body.trim().length === 0) return false;
+      return true;
+    },
   );
 
   // Sort: best stories first (more sources + longer body)
