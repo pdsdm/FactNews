@@ -406,25 +406,6 @@ export default function FeedPage() {
 
   if (!edition) return null;
 
-<<<<<<< HEAD
-  // Filter out articles with empty/missing content
-  const validArticles = edition.articles.filter(
-    (a) => a.headline?.trim() && (a.summary?.trim() || a.body?.trim()),
-  );
-
-  // Sort: articles with more sources & longer body first (best as hero)
-  const sorted = [...validArticles].sort((a, b) => {
-    const scoreA = (a.source_count || 0) * 2 + (a.body?.length || 0) / 100;
-    const scoreB = (b.source_count || 0) * 2 + (b.body?.length || 0) / 100;
-    return scoreB - scoreA;
-  });
-
-  // Layout tiers: hero (1) · second tier (2-4) · grid (5+)
-  const hero = sorted[0] ?? null;
-  const second = sorted[1] ?? null; // large left
-  const secondRight = sorted.slice(2, 4); // stacked right (st3, st4)
-  const grid = sorted.slice(4); // 3-col rest (st5, st6, st7…)
-=======
   const validArticles = (edition.articles ?? []).filter(
     (a) => a && a.headline && a.body
   );
@@ -489,7 +470,6 @@ export default function FeedPage() {
   ].filter(
     (n): n is NoticeEntry => Boolean(n) && !dismissed.has((n as NoticeEntry).id)
   );
->>>>>>> 623ddf5d0d937b169dd499c8bdb33616e5b8de39
 
   return (
     <div className="min-h-screen pb-20">
@@ -527,10 +507,6 @@ export default function FeedPage() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────── */}
-<<<<<<< HEAD
-      <div className="max-w-7xl mx-auto px-6 space-y-5">
-        {/* ── Tier 1: Hero (full width) ───────────────────────── */}
-=======
       <div className="max-w-7xl mx-auto px-6 space-y-6">
         {/* Notices */}
         {notices.length > 0 && (
@@ -548,7 +524,6 @@ export default function FeedPage() {
         )}
 
         {/* Hero article */}
->>>>>>> 623ddf5d0d937b169dd499c8bdb33616e5b8de39
         {hero && <ArticleCard article={hero} hero />}
 
         {/* ── Tier 2: Large left + stacked right ──────────────── */}
