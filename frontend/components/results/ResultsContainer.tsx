@@ -52,7 +52,7 @@ export function ResultsContainer({ response, query }: ResultsContainerProps) {
         summary={response.summary}
         answer={response.answer}
       />
-      <FactList facts={response.facts} />
+      <FactList facts={response.facts} mode={response.mode} />
       {response.divergences && response.divergences.length > 0 && (
         <DivergenceList divergences={response.divergences} />
       )}

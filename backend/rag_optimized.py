@@ -526,6 +526,136 @@ Ensure all facts include the mandatory 'date' field from their respective chunks
         }
         return judgment
 
+    def generate_answer_single(self, query: str, chunks: List[Dict]) -> Dict:
+        """
+        Fast mode: Generate answer using only Cerebras (single provider, no council).
+        Returns the same JSON schema as generate_answer but without council metadata.
+        """
+        from inference.factory import get_provider
+
+        system_prompt = self._build_system_prompt(len(chunks))
+        user_prompt = self._build_user_prompt(query, chunks)
+
+        provider = get_provider("cerebras")
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt + "\n\nIMPORTANT: Respond with ONLY a valid JSON object. No markdown, no commentary, just raw JSON."},
+        ]
+        resp = provider.complete(messages, temperature=0.3)
+        raw = resp.content.strip()
+        print(f"⚡ Cerebras raw response ({len(raw)} chars): {raw[:200]}...")
+
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+        if raw.endswith("```"):
+            raw = raw[:-3]
+        if raw.startswith("json"):
+            raw = raw[4:]
+
+        try:
+            result = json.loads(raw.strip())
+            print(f"⚡ Cerebras parsed OK: headline={result.get('headline', '')[:60]}, facts={len(result.get('facts', []))}")
+            return result
+        except json.JSONDecodeError as e:
+            print(f"⚡ Cerebras JSON parse error: {e}")
+            print(f"⚡ Raw content: {raw[:300]}")
+            return {
+                "headline": "Analysis",
+                "summary": raw[:500],
+                "facts": [],
+                "consensus_score": 0.0,
+                "coverage_quality": "low",
+            }
+
+    # ------ shared prompt builders (used by generate_answer & generate_answer_single) ------
+
+    def _build_system_prompt(self, num_chunks: int) -> str:
+        """Build the system prompt for fact extraction."""
+        return f"""You are a STRICT fact extractor. You can ONLY use information from the chunks provided below.
+
+ABSOLUTE CONSTRAINTS:
+1. You have EXACTLY {num_chunks} text chunks below - NO OTHER INFORMATION EXISTS
+2. ONLY extract facts that are EXPLICITLY AND LITERALLY stated in these chunks
+3. NEVER add context, background, or general knowledge
+4. NEVER infer or assume anything beyond the exact text
+5. If the chunks don't mention something, IT DOES NOT EXIST for you
+6. Every single fact MUST include a VERBATIM quote as evidence
+
+CONSENSUS RULES:
+- A fact has "consensus": true ONLY if 2 or more DIFFERENT chunks/sources state the same fact
+- A fact has "consensus": false if only 1 chunk/source mentions it
+- consensus_score = (number of consensus:true facts) / (total number of facts)
+
+RESPONSE FORMAT (JSON):
+{{
+  "headline": "Natural news headline summarizing the main story",
+  "summary": "Clear 2-3 sentence summary of the main facts and developments.",
+  "facts": [
+    {{
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "date": "YYYY-MM-DD",
+      "evidence": "EXACT quote from chunk",
+      "confidence": "high/medium/low",
+      "consensus": true/false
+    }}
+  ],
+  "divergences": [
+    {{
+      "topic": "What they disagree on",
+      "versions": [
+        {{"source": "X", "claim": "EXACT quote from chunk", "url": "..."}}
+      ]
+    }}
+  ],
+  "bias_analysis": "Analysis of how different sources frame the topic.",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "low/medium/high"
+}}
+
+Remember: You ONLY know what's in the {num_chunks} chunks below. Nothing else exists."""
+
+    def _build_user_prompt(self, query: str, chunks: List[Dict]) -> str:
+        """Build the user prompt with chunk context."""
+        context_parts = []
+        for i, chunk in enumerate(chunks):
+            chunk_with_context = self.chunker.get_chunk_with_context(chunk, self.chunks)
+            source = chunk['source']
+            title = chunk['title']
+            date = chunk.get('date', 'Unknown')
+            url = chunk['url']
+            sep = '=' * 80
+            context_parts.append(
+                f"SOURCE {i+1}: {source} - {title}\n"
+                f"DATE: {date}\n"
+                f"{sep}\n"
+                f"{chunk_with_context}\n"
+                f"URL: {url}"
+            )
+        context = "\n\n" + "="*80 + "\n\n".join(context_parts)
+
+        return f"""User question: {query}
+
+You have {len(chunks)} news chunks below with dates.
+
+CRITICAL INSTRUCTIONS:
+1. If chunks are NOT relevant: Return "No Relevant Information Found"
+2. If chunks ARE relevant:
+   - Write a NATURAL NEWS HEADLINE
+   - Write a CLEAR SUMMARY as if reporting news
+   - For EACH fact, include the "date" field from the chunk header
+   - For EACH fact, set "consensus" to true if 2+ different sources mention it
+   - Calculate consensus_score as: (number of consensus:true facts) / (total facts)
+   - Extract facts with dates from the chunks
+   - Include exact quotes as evidence
+
+Reference chunks:
+{context}
+
+Generate a natural news-style response based ONLY on what's in the chunks above."""
+
     async def generate_answer_async(self, query: str, chunks: List[Dict]) -> Dict:
         """
         Async version: Generate consensus answer from relevant chunks.

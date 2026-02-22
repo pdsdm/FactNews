@@ -6,9 +6,10 @@ import { FactCard } from "./FactCard";
 
 interface FactListProps {
   facts: Fact[];
+  mode?: "consensus" | "fast";
 }
 
-export function FactList({ facts }: FactListProps) {
+export function FactList({ facts, mode }: FactListProps) {
   return (
     <div className="mb-8">
       <h3 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2 dark:text-slate-100">
@@ -17,7 +18,7 @@ export function FactList({ facts }: FactListProps) {
       </h3>
       <div className="space-y-3">
         {facts.map((fact, idx) => (
-          <FactCard key={idx} fact={fact} index={idx} />
+          <FactCard key={idx} fact={fact} index={idx} showConsensus={mode !== "fast"} />
         ))}
       </div>
     </div>

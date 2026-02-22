@@ -504,18 +504,31 @@ async def ask_question_stream(request: QuestionRequest):
             print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
             
             # Send chunks selected update
-            mode_label = "fast Cerebras" if request.mode == "fast" else "consensus council"
+            is_fast = request.mode == "fast"
+            mode_label = "fast Cerebras" if is_fast else "consensus council"
             yield f"data: {json.dumps({'status': 'generating', 'message': f'Generating {mode_label} analysis...', 'chunks': len(diverse_chunks)})}\n\n"
             
-            # 3. Generate answer with streaming
+            # 3. Generate answer - fast (Cerebras only) or consensus (council)
             llm_start = time.time()
-            llm_response = await asyncio.to_thread(
-                _chunk_rag.generate_answer,
-                request.question,
-                diverse_chunks
-            )
+            if is_fast:
+                print(f"⚡ Fast mode: Generating with Cerebras using {len(diverse_chunks)} chunks...")
+                llm_response = await asyncio.to_thread(
+                    _chunk_rag.generate_answer_single,
+                    request.question,
+                    diverse_chunks
+                )
+            else:
+                print(f"🤖 Consensus mode: Generating with council using {len(diverse_chunks)} chunks...")
+                llm_response = await asyncio.to_thread(
+                    _chunk_rag.generate_answer,
+                    request.question,
+                    diverse_chunks
+                )
             llm_time = time.time() - llm_start
             print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
+            
+            # Extract council metadata (only present in consensus mode)
+            council_meta = llm_response.pop("_council_meta", None)
             
             # Format and send final response
             facts = [
@@ -527,7 +540,7 @@ async def ask_question_stream(request: QuestionRequest):
                     "evidence": fact.get("evidence"),
                     "consensus": fact.get("consensus", False),
                     "date": fact.get("date"),
-                    "model": model_label
+                    "model": "cerebras" if is_fast else "council"
                 }
                 for fact in llm_response.get("facts", [])
             ]

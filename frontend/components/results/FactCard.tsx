@@ -9,9 +9,10 @@ import { SourceLink } from "@/components/common/SourceLink";
 interface FactCardProps {
   fact: Fact;
   index: number;
+  showConsensus?: boolean;
 }
 
-export function FactCard({ fact, index }: FactCardProps) {
+export function FactCard({ fact, index, showConsensus = true }: FactCardProps) {
   return (
     <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow dark:bg-slate-800 dark:border-slate-700">
       <div className="flex items-start gap-4">
@@ -47,7 +48,7 @@ export function FactCard({ fact, index }: FactCardProps) {
 
           <div className="flex items-center gap-2">
             <ConfidenceBadge confidence={fact.confidence} />
-            <ConsensusBadge consensus={fact.consensus} />
+            {showConsensus && <ConsensusBadge consensus={fact.consensus} />}
           </div>
         </div>
       </div>

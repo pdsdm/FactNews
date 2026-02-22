@@ -26,6 +26,7 @@ export interface CouncilMeta {
 
 export interface ConsensusResponse {
   status: string;
+  mode?: "consensus" | "fast";
   headline?: string;
   summary?: string;
   answer?: string;

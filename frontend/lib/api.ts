@@ -1,13 +1,21 @@
 import { basepath } from "@/app/env";
-import type { Stats, ArticlesResponse, Suggestion, SearchPreviewResponse } from "./types";
+import type {
+  Stats,
+  ArticlesResponse,
+  Suggestion,
+  SearchPreviewResponse,
+} from "./types";
 
 const API = `http://${basepath}:8000`;
 
-export async function askStream(question: string): Promise<ReadableStreamDefaultReader<Uint8Array>> {
+export async function askStream(
+  question: string,
+  mode: "consensus" | "fast" = "consensus",
+): Promise<ReadableStreamDefaultReader<Uint8Array>> {
   const res = await fetch(`${API}/ask/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, mode }),
   });
 
   if (!res.ok) {
@@ -55,7 +63,9 @@ export async function refreshNews(): Promise<void> {
   }
 }
 
-export async function searchPreview(question: string): Promise<SearchPreviewResponse> {
+export async function searchPreview(
+  question: string,
+): Promise<SearchPreviewResponse> {
   const res = await fetch(`${API}/search/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -68,7 +78,9 @@ export async function searchPreview(question: string): Promise<SearchPreviewResp
   return res.json();
 }
 
-export async function getSources(): Promise<{ name: string; url: string; custom: boolean }[]> {
+export async function getSources(): Promise<
+  { name: string; url: string; custom: boolean }[]
+> {
   const res = await fetch(`${API}/sources`);
   if (!res.ok) throw new Error(`Error ${res.status}`);
   const data = await res.json();

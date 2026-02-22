@@ -30,7 +30,7 @@ export function useConsensus() {
       setStreamStatus("Initializing...");
 
       try {
-        const reader = await askStream(question, mode);
+        const reader = await askStream(question, mode as "consensus" | "fast");
         const decoder = new TextDecoder();
         let buffer = "";
         let finalResponse: ConsensusResponse | null = null;

@@ -9,6 +9,7 @@ interface MetricsBarProps {
 }
 
 export function MetricsBar({ response }: MetricsBarProps) {
+  const isFast = response.mode === "fast";
   const scorePercent = Math.round(response.consensus_score * 100);
   const coverageColor =
     response.coverage_quality === "low"
@@ -18,14 +19,16 @@ export function MetricsBar({ response }: MetricsBarProps) {
         : "text-emerald-600 dark:text-emerald-400";
 
   return (
-    <div className="grid grid-cols-3 gap-4 mb-8">
-      <MetricCard
-        label="Consensus Score"
-        value={response.facts.length === 0 ? "N/A" : `${scorePercent}%`}
-        icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-        progressValue={response.facts.length === 0 ? 0 : scorePercent}
-        progressColor="from-emerald-500 to-green-500"
-      />
+    <div className={`grid ${isFast ? "grid-cols-2" : "grid-cols-3"} gap-4 mb-8`}>
+      {!isFast && (
+        <MetricCard
+          label="Consensus Score"
+          value={response.facts.length === 0 ? "N/A" : `${scorePercent}%`}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+          progressValue={response.facts.length === 0 ? 0 : scorePercent}
+          progressColor="from-emerald-500 to-green-500"
+        />
+      )}
 
       <MetricCard
         label="Sources Analyzed"
