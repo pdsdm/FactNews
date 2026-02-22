@@ -279,6 +279,10 @@ async def _run_ingestion(max_feeds: int | None, scrape_full: bool, days_back: in
         
         get_response_cache().clear_all()
         
+        # Clear newspaper cache so users see fresh edition immediately
+        global _newspaper_cache
+        _newspaper_cache = {"data": None, "ts": 0}
+        
         logger.info(f"Ingestion complete: {stats}")
         return {
             "success": True,
@@ -719,6 +723,10 @@ async def _run_selected_ingestion(feeds: dict[str, str]):
         _chunk_rag = OptimizedChunkRAG(_articles)
 
         get_response_cache().clear_all()
+        
+        # Clear newspaper cache so users see fresh edition immediately
+        global _newspaper_cache
+        _newspaper_cache = {"data": None, "ts": 0}
 
         _ingestion_status["last_run"] = datetime.now(timezone.utc).isoformat()
         _ingestion_status["articles_added"] = count

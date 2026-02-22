@@ -25,7 +25,7 @@ const iconMap = {
 const LEFT = [
   { href: "/history", label: "History", icon: "History" },
   { href: "/trending", label: "Trending", icon: "TrendingUp" },
-  { href: "/search", label: "Search", icon: "Search" },
+  { href: "/search", label: "Check", icon: "Search" },
 ] as const;
 
 const RIGHT = [

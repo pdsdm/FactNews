@@ -196,15 +196,15 @@ function ArticleCard({
 
         {/* Headline */}
         <h2
-          className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 font-times-new-roman ${headlineClass}`}
+          className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 font-times-new-roman text-left ${headlineClass}`}
         >
           {headline}
         </h2>
 
-        {/* Summary — justified */}
+        {/* Summary */}
         {summary && (
           <p
-            className={`text-justify text-slate-500 dark:text-slate-400 leading-relaxed mb-3 ${
+            className={`text-left text-slate-500 dark:text-slate-400 leading-relaxed mb-3 ${
               isLarge ? "text-base" : "text-sm"
             } ${summaryClamp}`}
           >
@@ -212,11 +212,11 @@ function ArticleCard({
           </p>
         )}
 
-        {/* Body — justified, clamped */}
+        {/* Body */}
         {bodyParagraphs.length > 0 && (
           <div className="flex-1 overflow-hidden">
             <div
-              className={`text-justify text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-2 ${bodyClamp}`}
+              className={`text-left text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-2 ${bodyClamp}`}
             >
               {bodyParagraphs.map((p, i) => (
                 <p key={i}>{p}</p>
@@ -433,7 +433,7 @@ export default function FeedPage() {
           alt="LLM Council"
           width={480}
           height={345}
-          className="mx-auto"
+          className="mx-auto -mt-15 -mb-2"
           priority
         />
         <p className="mt-3 text-sm font-medium tracking-widest uppercase text-slate-400 dark:text-slate-500">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { basepath } from "../env";
 import {
   fetchSourcesCatalog,
@@ -21,6 +22,7 @@ import {
 const MAX_SOURCES = 20;
 
 export default function SourcesPage() {
+  const router = useRouter();
   const [catalog, setCatalog] = useState<CatalogCountry[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [savedSelection, setSavedSelection] = useState<Set<string>>(new Set());
@@ -115,9 +117,13 @@ export default function SourcesPage() {
       const result = await saveSelectedSources(Array.from(selected));
       setSavedSelection(new Set(selected));
       setSuccess(result.message);
+
+      // Navigate to feed after a brief delay to show success message
+      setTimeout(() => {
+        router.push("/feed");
+      }, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save sources");
-    } finally {
       setSaving(false);
     }
   };
