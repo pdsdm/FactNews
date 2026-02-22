@@ -324,18 +324,21 @@ export default function ArenaPage() {
 
       {/* ── Input ───────────────────────────────────────────────── */}
       <div className="max-w-2xl mx-auto px-6 mb-8">
-        <form onSubmit={handleAnalyze} className="relative group">
-          <textarea
+        <form
+          onSubmit={handleAnalyze}
+          className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl px-4 py-2 shadow-sm transition-all focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 dark:bg-slate-900 dark:border-slate-700 dark:focus-within:border-emerald-500 dark:focus-within:ring-emerald-900/20"
+        >
+          <input
+            type="text"
             value={newsItem}
             onChange={(e) => setNewsItem(e.target.value)}
             placeholder="Enter a claim, question, or topic to analyze…"
-            rows={2}
-            className="w-full px-5 py-4 pr-28 bg-white border-2 border-slate-200 rounded-2xl text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 resize-none transition-all shadow-sm dark:bg-slate-900 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-emerald-500 dark:focus:ring-emerald-900/20"
+            className="flex-1 py-2 bg-transparent text-slate-900 placeholder-slate-400 focus:outline-none dark:text-slate-100 dark:placeholder-slate-500"
           />
           <button
             type="submit"
             disabled={loading || !newsItem.trim()}
-            className="absolute right-2.5 bottom-2.5 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2 text-sm shadow-lg shadow-emerald-500/25"
+            className="flex-shrink-0 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-all flex items-center gap-2 text-sm shadow-lg shadow-emerald-500/25"
           >
             {loading ? (
               <>
