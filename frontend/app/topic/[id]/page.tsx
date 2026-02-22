@@ -31,7 +31,7 @@ function TopicContent({ params }: TopicPageProps) {
   if (mounted && !snapshotRef.current) {
     if (source === "bookmarks" && bookmarkEntry) {
       snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
-    } else if (historyEntry) {
+    } else if (historyEntry?.response) {
       snapshotRef.current = { query: historyEntry.query, response: historyEntry.response };
     } else if (bookmarkEntry) {
       snapshotRef.current = { query: bookmarkEntry.query, response: bookmarkEntry.response };
