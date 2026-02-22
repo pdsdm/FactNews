@@ -3,11 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Loader2,
   Newspaper,
   RefreshCw,
   Clock,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Sparkles,
@@ -186,7 +184,6 @@ function ArticleCard({
   const [expanded, setExpanded] = useState(false);
   const router = useRouter();
 
-<<<<<<< HEAD
   const headline = (article.headline ?? "").trim();
   const summary = (article.summary ?? "").trim();
   const bodyText = (article.body ?? "").trim();
@@ -196,32 +193,6 @@ function ArticleCard({
     ? bodyParagraphs.slice(0, 2)
     : bodyParagraphs.slice(0, 1);
   const hasMore = bodyParagraphs.length > previewParas.length;
-=======
-  const PREVIEW_CHARS = hero ? 600 : 280;
-  const bodyParagraphs = (article.body ?? "").split("\n\n").filter(Boolean);
-
-  let displayParas: string[];
-  let hasMore: boolean;
-
-  if (hero) {
-    hasMore = bodyParagraphs.length > 2;
-    displayParas = expanded ? bodyParagraphs : bodyParagraphs.slice(0, 2);
-  } else {
-    const firstPara = bodyParagraphs[0] ?? "";
-    const hasMultipleParas = bodyParagraphs.length > 1;
-    const isFirstParaLong = firstPara.length > PREVIEW_CHARS;
-    hasMore = hasMultipleParas || isFirstParaLong;
-    if (expanded) {
-      displayParas = bodyParagraphs;
-    } else if (hasMultipleParas) {
-      displayParas = [firstPara];
-    } else if (isFirstParaLong) {
-      displayParas = [firstPara.slice(0, PREVIEW_CHARS) + "…"];
-    } else {
-      displayParas = bodyParagraphs;
-    }
-  }
->>>>>>> 623ddf5d0d937b169dd499c8bdb33616e5b8de39
 
   // Don't render if there's no headline at all
   if (!headline) return null;
@@ -267,7 +238,6 @@ function ArticleCard({
       )}
 
       {/* Body */}
-<<<<<<< HEAD
       {bodyParagraphs.length > 0 && (
         <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-3">
           {(expanded ? bodyParagraphs : previewParas).map((p, i) => (
@@ -275,17 +245,6 @@ function ArticleCard({
           ))}
         </div>
       )}
-=======
-      <div
-        className={`text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-3 ${
-          hero ? "" : ""
-        }`}
-      >
-        {displayParas.map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
-      </div>
->>>>>>> 623ddf5d0d937b169dd499c8bdb33616e5b8de39
 
       {/* Actions row */}
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -407,16 +366,28 @@ export default function FeedPage() {
   if (!edition) return null;
 
   const validArticles = (edition.articles ?? []).filter(
-    (a) => a && a.headline && a.body
+    (a) => a && a.headline && a.body,
   );
-  const [hero, ...rest] = validArticles;
+
+  // Sort: best stories first (more sources + longer body)
+  const sorted = [...validArticles].sort((a, b) => {
+    const scoreA = (a.source_count || 0) * 2 + (a.body?.length || 0) / 100;
+    const scoreB = (b.source_count || 0) * 2 + (b.body?.length || 0) / 100;
+    return scoreB - scoreA;
+  });
+
+  // Tier layout: hero (1) · second tier (2-4) · grid (5+)
+  const hero = sorted[0] ?? null;
+  const second = sorted[1] ?? null;
+  const secondRight = sorted.slice(2, 4);
+  const grid = sorted.slice(4);
 
   /* ── Compute feed notices ─────────────────────────────────────── */
   const ageMin = Math.floor(
-    (Date.now() - new Date(edition.edition_time).getTime()) / 60_000
+    (Date.now() - new Date(edition.edition_time).getTime()) / 60_000,
   );
   const singleSourceCount = validArticles.filter(
-    (a) => a.source_count === 1
+    (a) => a.source_count === 1,
   ).length;
   const allMultiSource =
     validArticles.length > 0 && validArticles.every((a) => a.source_count >= 2);
@@ -429,46 +400,42 @@ export default function FeedPage() {
     dismissable?: boolean;
   };
 
-  const notices: NoticeEntry[] = [
-    /* 1. Edition refreshed — success, auto-dismissed via state */
+  const rawNotices: (NoticeEntry | false)[] = [
     refreshed && {
       id: "refreshed",
-      kind: "success" as const,
+      kind: "success" as NoticeKind,
       message: `Edition refreshed — ${validArticles.length} stories compiled from ${edition.total_sources} sources.`,
     },
-    /* 2. Stale edition — info, shown when >10 min old */
     !refreshed &&
       ageMin >= 10 && {
         id: "stale",
-        kind: "info" as const,
+        kind: "info" as NoticeKind,
         message: `This edition is ${ageMin} minute${ageMin !== 1 ? "s" : ""} old. New coverage may be available.`,
         action: { label: "Refresh now", onClick: () => fetchEdition(true) },
         dismissable: true,
       },
-    /* 3. Low source coverage — warning */
     edition.total_sources < 5 && {
       id: "lowcoverage",
-      kind: "warning" as const,
+      kind: "warning" as NoticeKind,
       message: `Only ${edition.total_sources} news source${edition.total_sources !== 1 ? "s" : ""} are currently available. Coverage may be limited.`,
       dismissable: true,
     },
-    /* 4. All stories multi-source verified — success */
     allMultiSource && {
       id: "multisource",
-      kind: "success" as const,
+      kind: "success" as NoticeKind,
       message: `All ${validArticles.length} stories in this edition are corroborated by multiple independent sources.`,
       dismissable: true,
     },
-    /* 5. Some single-source stories — warning */
     !allMultiSource &&
       singleSourceCount > 0 && {
         id: "singlesource",
-        kind: "warning" as const,
+        kind: "warning" as NoticeKind,
         message: `${singleSourceCount} ${singleSourceCount === 1 ? "story has" : "stories have"} single-source coverage — verify independently before sharing.`,
         dismissable: true,
       },
-  ].filter(
-    (n): n is NoticeEntry => Boolean(n) && !dismissed.has((n as NoticeEntry).id)
+  ];
+  const notices = rawNotices.filter(
+    (n): n is NoticeEntry => !!n && !dismissed.has(n.id),
   );
 
   return (
