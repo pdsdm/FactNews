@@ -489,24 +489,24 @@ export default function FeedPage() {
 
       {/* ── Content: unified grid ────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 xl:auto-rows-[260px]">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           {/* Hero — 3 cols × 2 rows */}
           {hero && (
-            <div className="xl:col-span-3 xl:row-span-2">
+            <div className="xl:col-span-3">
               <ArticleCard article={hero} size="large" />
             </div>
           )}
 
           {/* Story 2 — 2 cols × 2 rows */}
           {second && (
-            <div className="xl:col-span-2 xl:row-span-2">
+            <div className="xl:col-span-2">
               <ArticleCard article={second} size="mid" />
             </div>
           )}
 
           {/* Stories 3+ — 1 col × 1 row each */}
           {[...secondRight, ...visibleArticles].map((article, i) => (
-            <div key={i} className="xl:col-span-1 xl:row-span-1">
+            <div key={i} className="xl:col-span-1">
               <ArticleCard article={article} size="small" />
             </div>
           ))}
