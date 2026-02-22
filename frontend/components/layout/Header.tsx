@@ -23,17 +23,16 @@ const iconMap = {
 } as const;
 
 const LEFT = [
-  { href: "/search", label: "Search", icon: "Search" },
-  { href: "/sources", label: "Sources", icon: "Globe" },
   { href: "/history", label: "History", icon: "History" },
+  { href: "/trending", label: "Trending", icon: "TrendingUp" },
+  { href: "/search", label: "Search", icon: "Search" },
 ] as const;
 
-const CENTER = { href: "/feed", label: "Feed", icon: "Newspaper" } as const;
-
 const RIGHT = [
-  { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
   { href: "/arena", label: "Arena", icon: "Swords" },
-  { href: "/trending", label: "Trending", icon: "TrendingUp" },
+
+  { href: "/sources", label: "Sources", icon: "Globe" },
+  { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
 ] as const;
 
 function NavLink({
@@ -82,13 +81,12 @@ export function Header() {
             />
           ))}
 
-          {/* Center — Feed */}
-          <NavLink
-            href={CENTER.href}
-            label={CENTER.label}
-            icon={CENTER.icon}
-            active={pathname === "/" || pathname.startsWith("/feed")}
-          />
+          {/* Center — Masthead logo (links to Feed) */}
+          <Link href="/feed" className="px-6 py-1 mx-2">
+            <span className="text-4xl font-black tracking-tight text-slate-900 font-serif">
+              Consensus
+            </span>
+          </Link>
 
           {/* Right group */}
           {RIGHT.map((item) => (
@@ -105,4 +103,3 @@ export function Header() {
     </header>
   );
 }
-

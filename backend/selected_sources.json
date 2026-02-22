@@ -7,7 +7,6 @@
   "CBS News",
   "ABC News",
   "NPR",
-  "Associated Press",
   "Bloomberg",
   "The Wall Street Journal",
   "USA Today",
@@ -16,6 +15,8 @@
   "TechCrunch",
   "CNBC",
   "TIME",
-  "Sky News",
-  "La Vanguardia"
+  "La Vanguardia",
+  "El Periódico",
+  "El Mundo",
+  "RTVE"
 ]

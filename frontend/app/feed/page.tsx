@@ -119,11 +119,18 @@ function ArticleCard({
   const [expanded, setExpanded] = useState(false);
   const router = useRouter();
 
-  const bodyParagraphs = (article.body ?? "").split("\n\n").filter(Boolean);
+  const headline = (article.headline ?? "").trim();
+  const summary = (article.summary ?? "").trim();
+  const bodyText = (article.body ?? "").trim();
+  const category = (article.category ?? "Other").trim();
+  const bodyParagraphs = bodyText.split("\n\n").filter(Boolean);
   const previewParas = hero
     ? bodyParagraphs.slice(0, 2)
     : bodyParagraphs.slice(0, 1);
   const hasMore = bodyParagraphs.length > previewParas.length;
+
+  // Don't render if there's no headline at all
+  if (!headline) return null;
 
   return (
     <article
@@ -133,11 +140,13 @@ function ArticleCard({
     >
       {/* Category + sources */}
       <div className="flex items-center gap-2 mb-3">
-        <span
-          className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(article.category)}`}
-        >
-          {article.category}
-        </span>
+        {category && (
+          <span
+            className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
+          >
+            {category}
+          </span>
+        )}
         <span className="text-[10px] text-slate-400 dark:text-slate-500">
           {article.source_count} sources · {article.cluster_size} reports
         </span>
@@ -149,28 +158,28 @@ function ArticleCard({
           hero ? "text-2xl md:text-3xl" : "text-lg"
         }`}
       >
-        {article.headline}
+        {headline}
       </h2>
 
       {/* Summary */}
-      <p
-        className={`text-slate-500 dark:text-slate-400 leading-relaxed mb-4 ${
-          hero ? "text-base" : "text-sm"
-        }`}
-      >
-        {article.summary}
-      </p>
+      {summary && (
+        <p
+          className={`text-slate-500 dark:text-slate-400 leading-relaxed mb-4 ${
+            hero ? "text-base" : "text-sm"
+          }`}
+        >
+          {summary}
+        </p>
+      )}
 
       {/* Body */}
-      <div
-        className={`text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-3 ${
-          hero ? "" : ""
-        }`}
-      >
-        {(expanded ? bodyParagraphs : previewParas).map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
-      </div>
+      {bodyParagraphs.length > 0 && (
+        <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-3">
+          {(expanded ? bodyParagraphs : previewParas).map((p, i) => (
+            <p key={i}>{p}</p>
+          ))}
+        </div>
+      )}
 
       {/* Actions row */}
       <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -209,7 +218,7 @@ function ArticleCard({
           )}
           <button
             onClick={() =>
-              router.push(`/search?q=${encodeURIComponent(article.headline)}`)
+              router.push(`/search?q=${encodeURIComponent(headline)}`)
             }
             className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
           >
@@ -275,65 +284,97 @@ export default function FeedPage() {
 
   if (!edition) return null;
 
-  const [hero, ...rest] = edition.articles;
+  // Filter out articles with empty/missing content
+  const validArticles = edition.articles.filter(
+    (a) => a.headline?.trim() && (a.summary?.trim() || a.body?.trim()),
+  );
+
+  // Sort: articles with more sources & longer body first (best as hero)
+  const sorted = [...validArticles].sort((a, b) => {
+    const scoreA = (a.source_count || 0) * 2 + (a.body?.length || 0) / 100;
+    const scoreB = (b.source_count || 0) * 2 + (b.body?.length || 0) / 100;
+    return scoreB - scoreA;
+  });
+
+  // Layout tiers: hero (1) · second tier (2-4) · grid (5+)
+  const hero = sorted[0] ?? null;
+  const second = sorted[1] ?? null; // large left
+  const secondRight = sorted.slice(2, 4); // stacked right (st3, st4)
+  const grid = sorted.slice(4); // 3-col rest (st5, st6, st7…)
 
   return (
     <div className="min-h-screen pb-20">
-      {/* ── Masthead ──────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
-        <div className="text-center border-b-2 border-slate-900 dark:border-slate-100 pb-4 mb-1">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Sparkles className="w-4 h-4 text-emerald-600" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
+      {/* ── Edition info bar ─────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-6 pt-6 pb-4">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-emerald-600">
+              <Sparkles className="w-3.5 h-3.5" />
               AI-Generated · Fact-Based · Multi-Source
+            </div>
+            <span className="text-xs text-slate-400">
+              {formatEditionTime(edition.edition_time)} ·{" "}
+              {edition.total_sources} sources · {edition.articles.length}{" "}
+              stories
             </span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-black tracking-tight text-slate-900 dark:text-slate-100 font-serif">
-            The FactNews Daily
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 tracking-wide">
-            {formatEditionTime(edition.edition_time)} · {edition.total_sources}{" "}
-            sources analyzed · {edition.articles.length} stories
-          </p>
-        </div>
-
-        {/* Refresh bar */}
-        <div className="flex items-center justify-between mt-3">
-          <div className="flex items-center gap-1 text-[11px] text-slate-400">
-            <Clock className="w-3 h-3" />
-            Generated in {edition.generation_time_s}s
+          <div className="flex items-center gap-3">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {edition.generation_time_s}s
+            </span>
+            <button
+              onClick={() => fetchEdition(true)}
+              disabled={loading}
+              className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 transition-colors disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`w-3 h-3 ${loading ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </button>
           </div>
-          <button
-            onClick={() => fetchEdition(true)}
-            disabled={loading}
-            className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-            Refresh edition
-          </button>
         </div>
       </div>
 
       {/* ── Content ───────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 space-y-6">
-        {/* Hero article */}
+      <div className="max-w-7xl mx-auto px-6 space-y-5">
+        {/* ── Tier 1: Hero (full width) ───────────────────────── */}
         {hero && <ArticleCard article={hero} hero />}
 
-        {/* Divider */}
-        {rest.length > 0 && (
-          <div className="flex items-center gap-4">
-            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
-              More Stories
-            </span>
-            <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
-          </div>
+        {/* ── Tier 2: Large left + stacked right ──────────────── */}
+        {second && (
+          <>
+            <div className="flex items-center gap-4">
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                More Stories
+              </span>
+              <div className="flex-1 h-px bg-slate-200 dark:bg-slate-800" />
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+              {/* Story 2 — spans 2 columns */}
+              <div className="xl:col-span-2">
+                <ArticleCard article={second} hero />
+              </div>
+
+              {/* Stories 3 & 4 — stacked in 1 column */}
+              {secondRight.length > 0 && (
+                <div className="flex flex-col gap-4">
+                  {secondRight.map((article, i) => (
+                    <ArticleCard key={i} article={article} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
 
-        {/* 3-col grid */}
-        {rest.length > 0 && (
+        {/* ── Tier 3: 3-column grid (remaining stories) ──────── */}
+        {grid.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {rest.map((article, i) => (
+            {grid.map((article, i) => (
               <ArticleCard key={i} article={article} />
             ))}
           </div>

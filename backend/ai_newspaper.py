@@ -89,7 +89,7 @@ def _build_context_from_cluster(cluster: Dict, chunk_rag=None, max_chunks: int =
 
 
 def _generate_article(topic: str, context: str, provider_name: str) -> Optional[Dict]:
-    """Call the LLM to write one article."""
+    """Call the LLM to write one article. Returns None if output is invalid."""
     provider = get_provider(provider_name)
     try:
         resp = provider.complete(
@@ -100,7 +100,43 @@ def _generate_article(topic: str, context: str, provider_name: str) -> Optional[
             temperature=0.3,
             json_mode=True,
         )
-        return json.loads(resp.content)
+        raw = resp.content.strip()
+
+        # Handle markdown-wrapped JSON (```json ... ```)
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+        article = json.loads(raw)
+
+        # Validate required fields are non-empty strings
+        headline = (article.get("headline") or "").strip()
+        summary = (article.get("summary") or "").strip()
+        body = (article.get("body") or "").strip()
+
+        if not headline or not summary or not body:
+            print(f"  ⚠️  Article for '{topic[:50]}' has empty fields — headline={bool(headline)} summary={bool(summary)} body={bool(body)}")
+            # Try to salvage: use topic as headline fallback
+            if not headline:
+                article["headline"] = topic
+            if not summary and body:
+                article["summary"] = body[:200].rsplit(".", 1)[0] + "." if "." in body[:200] else body[:200]
+            if not body and summary:
+                article["body"] = summary
+            # If still no content at all, skip
+            if not (article.get("headline") or "").strip() or not ((article.get("body") or "").strip() or (article.get("summary") or "").strip()):
+                print(f"  ❌  Skipping '{topic[:50]}' — no usable content")
+                return None
+
+        # Ensure list fields
+        if not isinstance(article.get("sources_referenced"), list):
+            article["sources_referenced"] = []
+        if not article.get("category"):
+            article["category"] = "Other"
+
+        return article
+    except json.JSONDecodeError as e:
+        print(f"  ⚠️  JSON parse failed for '{topic[:50]}': {e}")
+        return None
     except Exception as e:
         print(f"  ⚠️  Article generation failed for '{topic[:50]}': {e}")
         return None
