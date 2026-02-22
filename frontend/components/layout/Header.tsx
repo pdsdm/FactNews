@@ -83,7 +83,7 @@ export function Header() {
 
           {/* Center — Masthead logo (links to Feed) */}
           <Link href="/feed" className="px-6 py-1 mx-2">
-            <span className="text-4xl font-black tracking-tight text-slate-900 font-serif">
+            <span className="text-4xl font-black tracking-tight text-slate-900 font-times-new-roman">
               Consensus
             </span>
           </Link>

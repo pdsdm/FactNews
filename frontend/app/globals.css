@@ -21,6 +21,10 @@
     text-wrap: balance;
   }
 
+  .font-times-new-roman {
+    font-family: 'Times New Roman', Times, serif;
+  }
+
   .animate-progress {
     animation: progress 1.5s ease-in-out infinite;
   }
