@@ -42,6 +42,8 @@ class OptimizedChunkRAG:
         providers = [p.strip() for p in providers_env.split(",")]
         self.council = ModelCouncil(providers=providers, judge="openai")
         
+        self.articles = articles
+        
         # Chunk all articles
         print("📦 Chunking articles...")
         self.chunks = self.chunker.chunk_all_articles(articles)
