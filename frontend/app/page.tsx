@@ -166,19 +166,26 @@ export default function Home() {
 
       const decoder = new TextDecoder();
       let result: Response | null = null;
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n").filter((line) => line.startsWith("data: "));
+        buffer += decoder.decode(value, { stream: true });
 
-        for (const line of lines) {
+        // SSE events are separated by double newlines; process only complete events
+        const events = buffer.split("\n\n");
+        // Keep the last (potentially incomplete) chunk in the buffer
+        buffer = events.pop() ?? "";
+
+        for (const event of events) {
+          const line = event.split("\n").find((l) => l.startsWith("data: "));
+          if (!line) continue;
           const jsonStr = line.slice(6);
           try {
             const data = JSON.parse(jsonStr);
-            
+
             if (data.status === "searching") {
               setStreamingStatus("Searching relevant chunks...");
             } else if (data.status === "found") {
