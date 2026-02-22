@@ -28,9 +28,29 @@ from rag_optimized import OptimizedChunkRAG
 from rss_ingester import ingest_news, RSS_FEEDS, RSSIngester
 from response_cache import get_response_cache
 from cache import get_redis
+from sources_catalog import SOURCES_BY_COUNTRY, get_catalog, get_all_source_urls
 from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger("factnews")
+
+SELECTED_SOURCES_FILE = "selected_sources.json"
+
+
+def _load_selected_sources() -> list[str]:
+    """Load user-selected source names from disk."""
+    try:
+        with open(SELECTED_SOURCES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_selected_sources(names: list[str]) -> None:
+    """Persist user-selected source names to disk."""
+    with open(SELECTED_SOURCES_FILE, "w", encoding="utf-8") as f:
+        json.dump(names, f, ensure_ascii=False, indent=2)
+
 
 # ---------------------------------------------------------------------------
 # Global state
@@ -41,6 +61,9 @@ _ingestion_status: dict = {"running": False, "last_run": None, "articles_added":
 
 # Custom sources added by users (name -> rss_url)
 _custom_sources: dict[str, str] = {}
+
+# User-selected sources (persisted)
+_selected_sources: list[str] = _load_selected_sources()
 
 METRICS: dict = {
     "requests_total": 0,
@@ -103,6 +126,7 @@ app.add_middleware(
 
 class QuestionRequest(BaseModel):
     question: str
+    mode: str = "consensus"  # "consensus" or "fast"
 
 
 class Fact(BaseModel):
@@ -113,6 +137,7 @@ class Fact(BaseModel):
     evidence: str | None = None
     consensus: bool | None = None
     date: str | None = None
+    model: str | None = None
 
 
 class Divergence(BaseModel):
@@ -132,6 +157,7 @@ class ConsensusResponse(BaseModel):
     chunks_used: int | None = None
     sources_analyzed: int | None = None
     cached: bool = False
+    mode: str | None = None
 
 
 @app.get("/")
@@ -350,10 +376,18 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
         
         # 3. Generate consensus article with LLM - MUCH FASTER (way less tokens)
         llm_start = time.time()
-        print(f"🤖 Generating consensus article with {len(diverse_chunks)} chunks...")
-        llm_response = _chunk_rag.generate_answer(request.question, diverse_chunks)
+        if request.mode == "fast":
+            print(f"⚡ Fast mode: Generating with Cerebras using {len(diverse_chunks)} chunks...")
+            llm_response = _chunk_rag.generate_answer_single(request.question, diverse_chunks)
+        else:
+            print(f"🤖 Consensus mode: Generating with council using {len(diverse_chunks)} chunks...")
+            llm_response = _chunk_rag.generate_answer(request.question, diverse_chunks)
         llm_time = time.time() - llm_start
         print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
+        
+        # Extract model information from response
+        providers_used = llm_response.pop("_providers_used", [])
+        model_label = " & ".join(providers_used) if providers_used else "Unknown"
         
         facts = [
             Fact(
@@ -364,6 +398,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
                 evidence=fact.get("evidence"),
                 consensus=fact.get("consensus", False),
                 date=fact.get("date"),
+                model=model_label,
             )
             for fact in llm_response.get("facts", [])
         ]
@@ -404,6 +439,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             chunks_used=len(diverse_chunks),
             sources_analyzed=unique_sources,
             cached=False,
+            mode=request.mode,
         )
         
         response_cache.set(request.question, response.model_dump())
@@ -474,18 +510,31 @@ async def ask_question_stream(request: QuestionRequest):
             print(f"⏱️  Diversity selection completed in {diversity_time:.3f}s")
             
             # Send chunks selected update
-            yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus analysis...', 'chunks': len(diverse_chunks)})}\n\n"
+            mode_label = "fast Cerebras" if request.mode == "fast" else "consensus council"
+            yield f"data: {json.dumps({'status': 'generating', 'message': f'Generating {mode_label} analysis...', 'chunks': len(diverse_chunks)})}\n\n"
             
             # 3. Generate answer with streaming
             llm_start = time.time()
-            llm_response = await loop.run_in_executor(
-                None,
-                _chunk_rag.generate_answer,
-                request.question,
-                diverse_chunks
-            )
+            if request.mode == "fast":
+                llm_response = await loop.run_in_executor(
+                    None,
+                    _chunk_rag.generate_answer_single,
+                    request.question,
+                    diverse_chunks
+                )
+            else:
+                llm_response = await loop.run_in_executor(
+                    None,
+                    _chunk_rag.generate_answer,
+                    request.question,
+                    diverse_chunks
+                )
             llm_time = time.time() - llm_start
             print(f"⏱️  LLM generation completed in {llm_time:.3f}s")
+            
+            # Extract model information from response
+            providers_used = llm_response.pop("_providers_used", [])
+            model_label = " & ".join(providers_used) if providers_used else "Unknown"
             
             # Format and send final response
             facts = [
@@ -496,7 +545,8 @@ async def ask_question_stream(request: QuestionRequest):
                     "confidence": fact.get("confidence", "medium"),
                     "evidence": fact.get("evidence"),
                     "consensus": fact.get("consensus", False),
-                    "date": fact.get("date")
+                    "date": fact.get("date"),
+                    "model": model_label
                 }
                 for fact in llm_response.get("facts", [])
             ]
@@ -520,6 +570,7 @@ async def ask_question_stream(request: QuestionRequest):
             
             response_data = {
                 "status": "complete",
+                "mode": request.mode,
                 "headline": llm_response.get("headline"),
                 "summary": llm_response.get("summary"),
                 "answer": llm_response.get("answer") or f"{llm_response.get('headline')}\n\n{llm_response.get('summary')}",
@@ -575,6 +626,114 @@ class AddSourceRequest(BaseModel):
     name: str
     rss_url: str
 
+
+class SaveSelectedSourcesRequest(BaseModel):
+    sources: list[str]  # list of source names
+
+
+# ── Catalog & selection endpoints ─────────────────────────────────────────
+
+@app.get("/sources/catalog")
+def sources_catalog():
+    """Return every available source grouped by country."""
+    return {"countries": get_catalog()}
+
+
+@app.get("/sources/selected")
+def sources_selected():
+    """Return currently active source names."""
+    return {"selected": _selected_sources}
+
+
+@app.put("/sources/selected")
+async def save_selected_sources(req: SaveSelectedSourcesRequest):
+    """Save the user's source selection, wipe old articles, scrape & embed the new set."""
+    global _articles, _chunk_rag, _selected_sources, _ingestion_status
+
+    # Validate names exist in the catalog
+    all_known = get_all_source_urls()
+    valid_names = [n for n in req.sources if n in all_known]
+
+    if not valid_names:
+        raise HTTPException(status_code=400, detail="No valid source names provided.")
+
+    # Persist selection
+    _selected_sources = valid_names
+    _save_selected_sources(valid_names)
+
+    # Build {name: rss_url} for selected sources
+    feeds_to_scrape = {name: all_known[name] for name in valid_names}
+
+    if _ingestion_status["running"]:
+        return {
+            "status": "already_running",
+            "message": "An ingestion is already in progress. Selection saved — it will be used on next run.",
+            "selected": valid_names,
+        }
+
+    # Run scrape in background
+    asyncio.create_task(_run_selected_ingestion(feeds_to_scrape))
+
+    return {
+        "status": "started",
+        "message": f"Saved {len(valid_names)} sources. Scraping in background…",
+        "selected": valid_names,
+    }
+
+
+async def _run_selected_ingestion(feeds: dict[str, str]):
+    """Background task: wipe old articles, scrape selected feeds, re-index."""
+    global _articles, _chunk_rag, _ingestion_status
+
+    _ingestion_status["running"] = True
+    logger.info(f"Starting selected-source ingestion for {len(feeds)} feeds…")
+
+    try:
+        loop = asyncio.get_event_loop()
+
+        def _scrape():
+            ingester = RSSIngester()
+            # Wipe previous articles so we only keep chosen sources
+            ingester.existing_articles = []
+            ingester.articles = []
+            ingester.seen_hashes = set()
+
+            # Parallel fetch across all selected feeds
+            feed_list = list(feeds.items())
+            ingester._parallel_fetch(feed_list, scrape_full=True, days_back=7)
+
+            # Re-assign IDs
+            for idx, a in enumerate(ingester.articles, 1):
+                a["id"] = idx
+
+            # Overwrite news.json (not append)
+            with open("news.json", "w", encoding="utf-8") as f:
+                json.dump(ingester.articles, f, ensure_ascii=False, indent=2)
+
+            return len(ingester.articles)
+
+        count = await loop.run_in_executor(None, _scrape)
+
+        # Reload into memory
+        with open("news.json", "r", encoding="utf-8") as f:
+            _articles = json.load(f)
+
+        logger.info(f"Re-initializing RAG with {len(_articles)} articles…")
+        _chunk_rag = OptimizedChunkRAG(_articles)
+
+        get_response_cache().clear_all()
+
+        _ingestion_status["last_run"] = datetime.utcnow().isoformat()
+        _ingestion_status["articles_added"] = count
+        logger.info(f"Selected-source ingestion complete: {count} articles")
+
+    except Exception as e:
+        logger.error(f"Selected-source ingestion failed: {e}")
+    finally:
+        _ingestion_status["running"] = False
+
+
+# ── Legacy source endpoints (kept for backwards compat) ──────────────────
 
 @app.get("/sources")
 def list_sources():

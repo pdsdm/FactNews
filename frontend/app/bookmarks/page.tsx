@@ -1,18 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useBookmarkStore } from "@/stores/bookmarkStore";
 import { timeAgo } from "@/lib/utils";
 
 export default function BookmarksPage() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const { bookmarks, removeBookmark } = useBookmarkStore();
-
-  if (!mounted) return null;
 
   return (
     <div className="min-h-screen">

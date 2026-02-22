@@ -77,6 +77,6 @@ def enrich_article_content(article: dict) -> dict:
         article['scraped'] = False
         print(f"    ⚠️  Using RSS summary only")
     
-    time.sleep(0.5)  # Be nice to servers
+    time.sleep(0.1)  # Small delay to be polite to servers
     
     return article

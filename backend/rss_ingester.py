@@ -1,10 +1,12 @@
 import feedparser
 import json
 import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import List, Dict
 from bs4 import BeautifulSoup
 import re
+import time
 from scraper import enrich_article_content
 
 # RSS Feeds - Top 10 English News Sources
@@ -79,8 +81,8 @@ class RSSIngester:
         return datetime.now().strftime("%Y-%m-%d")
     
     def fetch_feed(self, source: str, url: str, scrape_full: bool = True, days_back: int = 4) -> List[Dict]:
-        """Fetch and parse a single RSS feed"""
-        articles = []
+        """Fetch and parse a single RSS feed, scraping articles in parallel."""
+        raw_articles: List[Dict] = []
         cutoff_date = datetime.now() - timedelta(days=days_back)
         
         try:
@@ -88,16 +90,14 @@ class RSSIngester:
             feed = feedparser.parse(url)
             
             for entry in feed.entries[:50]:  # Check up to 50 entries
-                # Parse date first
                 article_date = self.parse_date(entry)
                 try:
                     article_datetime = datetime.strptime(article_date, "%Y-%m-%d")
                     if article_datetime < cutoff_date:
-                        continue  # Skip old articles
+                        continue
                 except:
-                    pass  # If date parsing fails, include it anyway
+                    pass
                 
-                # Get content
                 content = ""
                 if hasattr(entry, 'summary'):
                     content = self.clean_html(entry.summary)
@@ -106,11 +106,9 @@ class RSSIngester:
                 elif hasattr(entry, 'content'):
                     content = self.clean_html(entry.content[0].value)
                 
-                # Skip if no content
                 if not content or len(content) < 50:
                     continue
                 
-                # Build article
                 article = {
                     "title": entry.get('title', 'Sin título'),
                     "source": source,
@@ -120,48 +118,62 @@ class RSSIngester:
                     "scraped": False
                 }
                 
-                # Deduplicate
                 article_hash = self.get_content_hash(article['title'], article['url'])
                 if article_hash not in self.seen_hashes:
                     self.seen_hashes.add(article_hash)
-                    
-                    # Scrape full content if enabled
-                    if scrape_full:
-                        article = enrich_article_content(article)
-                    
-                    articles.append(article)
-                    
-                    # Limit to 20 per source to keep it manageable
-                    if len(articles) >= 20:
+                    raw_articles.append(article)
+                    if len(raw_articles) >= 20:
                         break
             
-            print(f"  ✅ {source}: {len(articles)} artículos")
+            # Scrape full content in parallel (4 threads per source)
+            if scrape_full and raw_articles:
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    futures = {pool.submit(enrich_article_content, a): a for a in raw_articles}
+                    raw_articles = [futures[f] for f in as_completed(futures)]
+            
+            print(f"  ✅ {source}: {len(raw_articles)} artículos")
             
         except Exception as e:
             print(f"  ❌ Error fetching {source}: {str(e)}")
         
-        return articles
+        return raw_articles
     
     def fetch_all(self, max_feeds: int = None, scrape_full: bool = True, days_back: int = 4) -> List[Dict]:
-        """Fetch from all RSS feeds"""
+        """Fetch from all RSS feeds in parallel."""
         self.articles = []
-        # Keep seen_hashes to avoid re-scraping existing articles
         
         feeds = list(RSS_FEEDS.items())
         if max_feeds:
             feeds = feeds[:max_feeds]
         
-        print(f"\n🔍 Fetching articles from last {days_back} days...\n")
+        print(f"\n🔍 Fetching articles from last {days_back} days (parallel)...\n")
         
-        for source, url in feeds:
-            articles = self.fetch_feed(source, url, scrape_full=scrape_full, days_back=days_back)
-            self.articles.extend(articles)
+        self._parallel_fetch(feeds, scrape_full=scrape_full, days_back=days_back)
         
         # Add IDs
         for idx, article in enumerate(self.articles, 1):
             article['id'] = idx
         
         return self.articles
+    
+    def _parallel_fetch(self, feeds: List[tuple], scrape_full: bool = True, days_back: int = 4):
+        """Scrape multiple feeds concurrently."""
+        start = time.time()
+        workers = min(8, len(feeds))  # up to 8 feeds at once
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(self.fetch_feed, name, url, scrape_full, days_back): name
+                for name, url in feeds
+            }
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    arts = future.result()
+                    self.articles.extend(arts)
+                except Exception as e:
+                    print(f"  ❌ {name} failed: {e}")
+        elapsed = time.time() - start
+        print(f"\n⚡ Parallel fetch done: {len(self.articles)} articles in {elapsed:.1f}s")
     
     def save(self):
         """Save articles to JSON file, merging with existing ones"""

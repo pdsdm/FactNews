@@ -34,7 +34,7 @@ export function StatsOverview() {
         icon={<Database className="w-5 h-5 text-blue-500" />}
       />
       <MetricCard
-        label="Chunks Created"
+        label="Facts Checked"
         value={stats.chunks_created}
         icon={<Layers className="w-5 h-5 text-indigo-500" />}
       />

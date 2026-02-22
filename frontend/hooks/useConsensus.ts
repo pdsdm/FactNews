@@ -18,7 +18,10 @@ export function useConsensus() {
   }, []);
 
   const ask = useCallback(
-    async (question: string): Promise<ConsensusResponse | null> => {
+    async (
+      question: string,
+      mode: "consensus" | "fast" = "consensus",
+    ): Promise<ConsensusResponse | null> => {
       if (!question.trim()) return null;
 
       setLoading(true);
@@ -27,7 +30,7 @@ export function useConsensus() {
       setStreamStatus("Initializing...");
 
       try {
-        const reader = await askStream(question);
+        const reader = await askStream(question, mode);
         const decoder = new TextDecoder();
         let buffer = "";
         let finalResponse: ConsensusResponse | null = null;

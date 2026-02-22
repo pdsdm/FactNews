@@ -1,45 +1,34 @@
 "use client";
 
-import { X, Rss } from "lucide-react";
-
 interface SourceCardProps {
   name: string;
-  rssUrl?: string;
-  removable?: boolean;
-  onRemove?: () => void;
+  selected: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
 }
 
 export function SourceCard({
   name,
-  rssUrl,
-  removable,
-  onRemove,
+  selected,
+  onToggle,
+  disabled = false,
 }: SourceCardProps) {
   return (
-    <div className="flex items-center justify-between p-4 bg-white rounded-xl border border-slate-200 dark:bg-slate-800 dark:border-slate-700">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 dark:bg-blue-900/30">
-          <Rss className="w-4 h-4 text-blue-700 dark:text-blue-300" />
-        </div>
-        <div className="min-w-0">
-          <p className="font-medium text-slate-900 dark:text-slate-100">
-            {name}
-          </p>
-          {rssUrl && (
-            <p className="text-xs text-slate-400 truncate dark:text-slate-500">
-              {rssUrl}
-            </p>
-          )}
-        </div>
-      </div>
-      {removable && onRemove && (
-        <button
-          onClick={onRemove}
-          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors flex-shrink-0 dark:hover:bg-red-950/30"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      className={`
+        px-3.5 py-2 rounded-lg text-sm font-medium transition-all duration-150 border
+        ${
+          selected
+            ? "bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500"
+            : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700 dark:hover:border-slate-600"
+        }
+        ${disabled && !selected ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+      `}
+    >
+      {name}
+    </button>
   );
 }

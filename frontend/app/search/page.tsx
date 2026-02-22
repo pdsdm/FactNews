@@ -16,22 +16,25 @@ function SearchContent() {
   const { response, loading, error, streamStatus, ask } = useConsensus();
   const addEntry = useSearchHistoryStore((s) => s.addEntry);
   const [submitted, setSubmitted] = useState(false);
+  const [consensusMode, setConsensusMode] = useState(true);
 
   useEffect(() => {
     const q = searchParams.get("q");
     if (q && !submitted) {
       setQuestion(q);
       setSubmitted(true);
-      ask(q).then((result) => {
+      const mode = consensusMode ? "consensus" : "fast";
+      ask(q, mode).then((result) => {
         if (result) addEntry(q, result);
       });
     }
-  }, [searchParams, submitted, ask, addEntry]);
+  }, [searchParams, submitted, ask, addEntry, consensusMode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
-    const result = await ask(question);
+    const mode = consensusMode ? "consensus" : "fast";
+    const result = await ask(question, mode);
     addEntry(question, result);
   };
 
@@ -45,6 +48,8 @@ function SearchContent() {
           onChange={setQuestion}
           onSubmit={handleSubmit}
           loading={loading}
+          consensusMode={consensusMode}
+          onToggleMode={setConsensusMode}
         />
         <StreamStatus message={streamStatus} />
       </div>

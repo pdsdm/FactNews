@@ -18,7 +18,7 @@ export function HeadlineSummary({
           {headline}
         </h2>
         {summary && (
-          <p className="text-lg text-slate-600 leading-relaxed dark:text-slate-400">
+          <p className="text-lg text-slate-600 leading-relaxed text-justify dark:text-slate-400">
             {summary}
           </p>
         )}
@@ -32,7 +32,7 @@ export function HeadlineSummary({
         <h3 className="text-xl font-semibold text-slate-900 mb-3 dark:text-slate-100">
           Answer
         </h3>
-        <p className="text-slate-700 leading-relaxed whitespace-pre-line dark:text-slate-300">
+        <p className="text-slate-700 leading-relaxed whitespace-pre-line text-justify dark:text-slate-300">
           {answer}
         </p>
       </div>

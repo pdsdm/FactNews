@@ -15,6 +15,7 @@ from typing import List, Dict, Optional
 from chunker import ArticleChunker
 from embedding_cache import EmbeddingCache
 from inference.council import ModelCouncil
+from inference.factory import get_provider
 from filelock import FileLock
 from dotenv import load_dotenv
 
@@ -38,7 +39,7 @@ class OptimizedChunkRAG:
         self.embedding_cache = EmbeddingCache(lru_size=1000)
         
         # Initialize Model Council with all available providers
-        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai,crusoe,google,cerebras")
+        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai,crusoe,cerebras")
         providers = [p.strip() for p in providers_env.split(",")]
         self.council = ModelCouncil(providers=providers, judge="openai")
         
@@ -503,7 +504,139 @@ Ensure all facts include the mandatory 'date' field from their respective chunks
             judge_system_prompt=judge_system_prompt
         )
         
-        return council_result.get("judgment", {})
+        judgment = council_result.get("judgment", {})
+        # Add model information for attribution
+        judgment["_providers_used"] = council_result.get("providers_used", [])
+        return judgment
+
+    def generate_answer_single(self, query: str, chunks: List[Dict]) -> Dict:
+        """
+        Generate answer using a single Cerebras AI call (no council/judge).
+        Uses the same system prompt and context building as generate_answer,
+        but sends one request to the Cerebras provider only.
+        """
+        import json as _json
+
+        system_prompt = """You are a STRICT fact extractor. You can ONLY use information from the chunks provided below.
+
+ABSOLUTE CONSTRAINTS:
+1. You have EXACTLY {num_chunks} text chunks below - NO OTHER INFORMATION EXISTS
+2. ONLY extract facts that are EXPLICITLY AND LITERALLY stated in these chunks
+3. NEVER add context, background, or general knowledge
+4. NEVER infer or assume anything beyond the exact text
+5. If the chunks don't mention something, IT DOES NOT EXIST for you
+6. Every single fact MUST include a VERBATIM quote as evidence
+
+IMPORTANT: Since you are the only model analyzing these chunks, be thorough.
+- Mark "consensus": true if 2+ DIFFERENT source chunks state the same fact
+- Mark "consensus": false if only 1 source mentions it
+- consensus_score = (number of consensus:true facts) / (total number of facts)
+
+RESPONSE FORMAT (JSON):
+{{
+  "headline": "Natural news headline summarizing the main story",
+  "summary": "Clear 2-3 sentence summary of the main facts.",
+  "facts": [
+    {{
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "date": "YYYY-MM-DD from chunk header DATE line",
+      "evidence": "EXACT quote from chunk",
+      "confidence": "high/medium/low",
+      "consensus": true/false
+    }}
+  ],
+  "divergences": [
+    {{
+      "topic": "What they disagree on",
+      "versions": [
+        {{"source": "X", "claim": "EXACT quote from chunk", "url": "..."}}
+      ]
+    }}
+  ],
+  "bias_analysis": "Analysis of how different sources frame the topic.",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "low/medium/high"
+}}
+
+Write a NATURAL NEWS HEADLINE and CLEAR SUMMARY (not meta-commentary about chunks).
+If chunks are NOT relevant, return headline "No Relevant Information Found"."""
+
+        # Build context from chunks (same as generate_answer)
+        context_parts = []
+        for i, chunk in enumerate(chunks):
+            chunk_with_context = self.chunker.get_chunk_with_context(chunk, self.chunks)
+            context_parts.append(
+                f"SOURCE {i+1}: {chunk['source']} - {chunk['title']}\n"
+                f"DATE: {chunk.get('date', 'Unknown')}\n"
+                f"{'='*80}\n"
+                f"{chunk_with_context}\n"
+                f"URL: {chunk['url']}"
+            )
+
+        context = "\n\n" + "="*80 + "\n\n".join(context_parts)
+
+        user_prompt = f"""User question: {query}
+
+You have {len(chunks)} news chunks below with dates.
+
+CRITICAL INSTRUCTIONS:
+1. If chunks are NOT relevant: Return "No Relevant Information Found"
+2. If chunks ARE relevant:
+   - Write a NATURAL NEWS HEADLINE
+   - Write a CLEAR SUMMARY as if reporting news
+   - For EACH fact include the "date" field from the chunk header
+   - Set "consensus" true/false based on multi-source confirmation
+   - Calculate consensus_score = (consensus:true facts) / (total facts)
+
+Reference chunks:
+{context}
+
+Respond with ONLY valid JSON. DO NOT FORGET THE DATE FIELD FOR EACH FACT!"""
+
+        # Single Cerebras call
+        print(f"⚡ FAST MODE: Querying Cerebras with {len(chunks)} chunks...")
+        import time as _time
+        start = _time.time()
+
+        provider = get_provider("cerebras")
+        response = provider.complete(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            json_mode=True,
+        )
+
+        elapsed = (_time.time() - start) * 1000
+        print(f"⚡ Cerebras responded in {elapsed:.0f}ms")
+
+        # Parse JSON response
+        clean_content = response.content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.split("\n")
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
+        try:
+            result = _json.loads(clean_content)
+        except _json.JSONDecodeError:
+            result = {
+                "headline": "Parse Error",
+                "summary": clean_content,
+                "facts": [],
+                "consensus_score": 0.0,
+                "coverage_quality": "low",
+            }
+
+        # Add model information for attribution
+        result["_providers_used"] = ["Cerebras"]
+        return result
     
     def search_relevant_chunks(self, question: str, top_k: int = 20) -> Dict:
         """
