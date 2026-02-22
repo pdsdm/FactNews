@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Newspaper, Search, Globe, History, Bookmark } from "lucide-react";
+import {
+  Newspaper,
+  Search,
+  Globe,
+  History,
+  Bookmark,
+  Swords,
+} from "lucide-react";
 import { NAV_ITEMS } from "@/lib/constants";
 
 const iconMap = {
@@ -11,6 +18,7 @@ const iconMap = {
   Globe,
   History,
   Bookmark,
+  Swords,
 } as const;
 
 export function BottomNav() {

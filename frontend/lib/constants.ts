@@ -4,6 +4,7 @@ export const NAV_ITEMS = [
   { href: "/sources", label: "Sources", icon: "Globe" },
   { href: "/history", label: "History", icon: "History" },
   { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
+  { href: "/arena", label: "Arena", icon: "Swords" },
 ] as const;
 
 export const BOOKMARKS_MAX = 100;
@@ -25,17 +26,32 @@ export const SOURCE_COLORS: Record<string, { bar: string; bg: string }> = {
   CNN: { bar: "bg-red-600", bg: "bg-red-50 dark:bg-red-950/30" },
   Reuters: { bar: "bg-orange-500", bg: "bg-orange-50 dark:bg-orange-950/30" },
   "The Guardian": { bar: "bg-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
-  "New York Times": { bar: "bg-gray-800", bg: "bg-gray-50 dark:bg-gray-900/30" },
-  "Washington Post": { bar: "bg-gray-700", bg: "bg-gray-50 dark:bg-gray-900/30" },
-  "Wall Street Journal": { bar: "bg-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30" },
+  "New York Times": {
+    bar: "bg-gray-800",
+    bg: "bg-gray-50 dark:bg-gray-900/30",
+  },
+  "Washington Post": {
+    bar: "bg-gray-700",
+    bg: "bg-gray-50 dark:bg-gray-900/30",
+  },
+  "Wall Street Journal": {
+    bar: "bg-amber-600",
+    bg: "bg-amber-50 dark:bg-amber-950/30",
+  },
   AP: { bar: "bg-red-500", bg: "bg-red-50 dark:bg-red-950/30" },
   NPR: { bar: "bg-blue-500", bg: "bg-blue-50 dark:bg-blue-950/30" },
   Politico: { bar: "bg-blue-700", bg: "bg-blue-50 dark:bg-blue-950/30" },
   Axios: { bar: "bg-indigo-500", bg: "bg-indigo-50 dark:bg-indigo-950/30" },
   Bloomberg: { bar: "bg-black", bg: "bg-slate-50 dark:bg-slate-900/30" },
-  "Financial Times": { bar: "bg-pink-600", bg: "bg-pink-50 dark:bg-pink-950/30" },
+  "Financial Times": {
+    bar: "bg-pink-600",
+    bg: "bg-pink-50 dark:bg-pink-950/30",
+  },
   AlJazeera: { bar: "bg-amber-500", bg: "bg-amber-50 dark:bg-amber-950/30" },
-  "The Hill": { bar: "bg-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-950/30" },
+  "The Hill": {
+    bar: "bg-indigo-600",
+    bg: "bg-indigo-50 dark:bg-indigo-950/30",
+  },
   TheVerge: { bar: "bg-purple-600", bg: "bg-purple-50 dark:bg-purple-950/30" },
   Wired: { bar: "bg-gray-900", bg: "bg-gray-50 dark:bg-gray-900/30" },
   TechCrunch: { bar: "bg-green-500", bg: "bg-green-50 dark:bg-green-950/30" },

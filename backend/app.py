@@ -29,6 +29,7 @@ from rss_ingester import ingest_news, RSS_FEEDS, RSSIngester
 from response_cache import get_response_cache
 from cache import get_redis
 from sources_catalog import SOURCES_BY_COUNTRY, get_catalog, get_all_source_urls
+from pulse import get_ai_industry_analysis
 from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger("factnews")
@@ -824,6 +825,30 @@ async def remove_source(name: str):
         logger.error(f"Error removing source: {e}")
 
     return {"success": True, "message": f"Removed '{name}'."}
+
+
+# ---------------------------------------------------------------------------
+# LLM Arena (AI Pulse)
+# ---------------------------------------------------------------------------
+
+class PulseRequest(BaseModel):
+    news_item: str
+
+
+@app.post("/api/ai-pulse")
+async def ai_pulse(request: PulseRequest):
+    """Multi-Agent Arena: 6 analysts debate, 1 anonymous judge delivers verdict."""
+    if not os.getenv("OPENROUTER_API_KEY"):
+        raise HTTPException(
+            status_code=500,
+            detail="OPENROUTER_API_KEY not configured. Add it to your .env file.",
+        )
+    try:
+        result = await asyncio.to_thread(get_ai_industry_analysis, request.news_item)
+        return result
+    except Exception as e:
+        logger.error(f"Pulse error: {e}")
+        raise HTTPException(status_code=500, detail=f"Arena error: {str(e)}")
 
 
 if __name__ == "__main__":

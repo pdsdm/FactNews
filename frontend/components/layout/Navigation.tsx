@@ -8,6 +8,7 @@ import {
   Globe,
   History,
   Bookmark,
+  Swords,
 } from "lucide-react";
 import { NAV_ITEMS } from "@/lib/constants";
 
@@ -17,6 +18,7 @@ const iconMap = {
   Globe,
   History,
   Bookmark,
+  Swords,
 } as const;
 
 export function Navigation() {
