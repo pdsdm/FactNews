@@ -30,6 +30,7 @@ from response_cache import get_response_cache
 from cache import get_redis
 from sources_catalog import SOURCES_BY_COUNTRY, get_catalog, get_all_source_urls
 from pulse import get_ai_industry_analysis
+from ai_newspaper import generate_newspaper_edition
 from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger("factnews")
@@ -849,6 +850,46 @@ async def ai_pulse(request: PulseRequest):
     except Exception as e:
         logger.error(f"Pulse error: {e}")
         raise HTTPException(status_code=500, detail=f"Arena error: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# AI Newspaper Edition
+# ---------------------------------------------------------------------------
+
+# Simple in-memory cache for the edition (regenerate at most every 10 min)
+_newspaper_cache: dict = {"data": None, "ts": 0}
+_NEWSPAPER_TTL = 600  # seconds
+
+
+@app.get("/api/newspaper")
+async def get_newspaper(force: bool = False):
+    """Return the AI-generated newspaper edition, cached for 10 min."""
+    global _newspaper_cache
+
+    now = time.time()
+    if (
+        not force
+        and _newspaper_cache["data"]
+        and now - _newspaper_cache["ts"] < _NEWSPAPER_TTL
+    ):
+        return _newspaper_cache["data"]
+
+    arts = _chunk_rag.articles if _chunk_rag else _articles
+    if not arts:
+        raise HTTPException(status_code=503, detail="No articles available yet.")
+
+    try:
+        result = await asyncio.to_thread(
+            generate_newspaper_edition,
+            arts,
+            _chunk_rag,
+            8,   # max_stories
+        )
+        _newspaper_cache = {"data": result, "ts": time.time()}
+        return result
+    except Exception as e:
+        logger.error(f"Newspaper generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate edition: {str(e)}")
 
 
 if __name__ == "__main__":
