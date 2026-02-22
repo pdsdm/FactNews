@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
 ] as const;
 
 export const BOOKMARKS_MAX = 100;
+export const SEARCH_HISTORY_MAX = 50;
 
 export const SEARCH_CATEGORIES = [
   "Politics",

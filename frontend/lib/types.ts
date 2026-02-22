@@ -98,3 +98,12 @@ export interface Bookmark {
   savedAt: number;
   note?: string;
 }
+
+export interface SearchHistoryEntry {
+  id: string;
+  query: string;
+  timestamp: number;
+  response: ConsensusResponse | null;
+  consensusScore: number | null;
+  factsCount: number;
+}
