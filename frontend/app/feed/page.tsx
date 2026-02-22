@@ -14,7 +14,7 @@ import Image from "next/image";
 import { basepath } from "../env";
 
 const API = `http://${basepath}:8000`;
-const ARTICLES_PER_PAGE = 12;
+const ARTICLES_PER_PAGE = 6;
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 interface AIArticle {
@@ -114,9 +114,11 @@ type CardSize = "large" | "mid" | "small";
 function ArticleCard({
   article,
   size = "small",
+  showImage = false,
 }: {
   article: AIArticle;
   size?: CardSize;
+  showImage?: boolean;
 }) {
   const router = useRouter();
 
@@ -125,7 +127,7 @@ function ArticleCard({
   const bodyText = (article.body ?? "").trim();
   const category = (article.category ?? "Other").trim();
   const bodyParagraphs = bodyText.split("\n\n").filter(Boolean);
-  const imageUrl = article.image_url;
+  const imageUrl = showImage ? article.image_url : undefined;
 
   if (!headline) return null;
 
@@ -318,7 +320,7 @@ export default function FeedPage() {
           setVisibleCount((prev) => prev + ARTICLES_PER_PAGE);
         }
       },
-      { threshold: 0.1, rootMargin: '100px' },
+      { threshold: 0.1, rootMargin: "100px" },
     );
 
     observer.observe(element);
@@ -407,6 +409,13 @@ export default function FeedPage() {
     fetchEdition();
   }, [fetchEdition]);
 
+  // Reset visible count when edition changes
+  useEffect(() => {
+    if (edition) {
+      setVisibleCount(ARTICLES_PER_PAGE);
+    }
+  }, [edition?.edition_time]);
+
   /* Loading */
   if (loading && !edition) return <EditionSkeleton />;
 
@@ -431,15 +440,13 @@ export default function FeedPage() {
 
   if (!edition) return null;
 
-  const validArticles = (edition.articles ?? []).filter(
-    (a) => {
-      // Filter out articles with missing critical fields
-      if (!a) return false;
-      if (!a.headline || a.headline.trim().length === 0) return false;
-      if (!a.body || a.body.trim().length === 0) return false;
-      return true;
-    },
-  );
+  const validArticles = (edition.articles ?? []).filter((a) => {
+    // Filter out articles with missing critical fields
+    if (!a) return false;
+    if (!a.headline || a.headline.trim().length === 0) return false;
+    if (!a.body || a.body.trim().length === 0) return false;
+    return true;
+  });
 
   // Sort: best stories first (more sources + longer body)
   const sorted = [...validArticles].sort((a, b) => {
@@ -494,26 +501,43 @@ export default function FeedPage() {
       {/* ── Content: unified grid ────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-          {/* Hero — 3 cols × 2 rows */}
+          {/* Hero — full width with image */}
           {hero && (
             <div className="xl:col-span-3">
-              <ArticleCard article={hero} size="large" />
+              <ArticleCard article={hero} size="large" showImage />
             </div>
           )}
 
-          {/* Story 2 — 2 cols × 2 rows */}
+          {/* Story 2 — 2 cols with image */}
           {second && (
             <div className="xl:col-span-2">
-              <ArticleCard article={second} size="mid" />
+              <ArticleCard article={second} size="mid" showImage />
             </div>
           )}
 
-          {/* Stories 3+ — 1 col × 1 row each */}
-          {[...secondRight, ...visibleArticles].map((article, i) => (
-            <div key={i} className="xl:col-span-1">
+          {/* Stories 3-4 — small, no image */}
+          {secondRight.map((article, i) => (
+            <div key={article.headline || `sr-${i}`} className="xl:col-span-1">
               <ArticleCard article={article} size="small" />
             </div>
           ))}
+
+          {/* Remaining stories — alternating pattern */}
+          {visibleArticles.map((article, i) => {
+            // Every 5th article (0, 5, 10...) spans 2 cols with image
+            // Every 8th article (3, 8, 13...) spans 2 cols with image on other side
+            const isFeatured = i % 5 === 0;
+            const isMidFeature = i % 5 === 3;
+            const hasPhoto = isFeatured || isMidFeature;
+            const span = hasPhoto ? "xl:col-span-2" : "xl:col-span-1";
+            const cardSize = hasPhoto ? "mid" : "small";
+
+            return (
+              <div key={article.headline || `v-${i}`} className={span}>
+                <ArticleCard article={article} size={cardSize} showImage={hasPhoto} />
+              </div>
+            );
+          })}
         </div>
 
         {/* Infinite scroll sentinel */}

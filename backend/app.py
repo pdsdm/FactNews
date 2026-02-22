@@ -891,7 +891,7 @@ async def get_newspaper(force: bool = False):
             generate_newspaper_edition,
             arts,
             _chunk_rag,
-            8,   # max_stories
+            20,   # max_stories
         )
         _newspaper_cache = {"data": result, "ts": time.time()}
         return result
