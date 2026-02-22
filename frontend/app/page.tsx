@@ -8,11 +8,13 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
   ExternalLink,
   BarChart3,
   Shield,
   Zap,
   Loader2,
+  Users,
 } from "lucide-react";
 import { basepath } from "./env";
 
@@ -37,6 +39,13 @@ interface Divergence {
   }>;
 }
 
+interface CouncilMeta {
+  judge: string;
+  providers_used: string[];
+  providers_failed: string[];
+  individual_responses: Record<string, string>;
+}
+
 interface Response {
   headline?: string;
   summary?: string;
@@ -49,6 +58,7 @@ interface Response {
   chunks_used?: number;
   sources_analyzed?: number;
   cached?: boolean;
+  council_meta?: CouncilMeta;
 }
 
 interface Stats {
@@ -83,6 +93,7 @@ export default function Home() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [useStreaming, setUseStreaming] = useState(true);
+  const [showCouncil, setShowCouncil] = useState(false);
 
   useEffect(() => {
     fetchStats();
@@ -560,6 +571,96 @@ export default function Home() {
                   <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                     {response.answer}
                   </p>
+                </div>
+              )}
+
+              {/* Council Deliberation Panel */}
+              {response.council_meta && (
+                <div className="mb-8">
+                  <button
+                    onClick={() => setShowCouncil(!showCouncil)}
+                    className="w-full bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 border border-indigo-200 hover:border-indigo-300 transition-all flex items-center justify-between group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
+                        <Users className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-slate-900">
+                          Council Deliberation
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          <span className="text-indigo-600 font-medium">
+                            {response.council_meta.providers_used.length} models
+                          </span>
+                          {" deliberated · "}
+                          <span className="text-purple-600 font-medium">
+                            {response.council_meta.judge}
+                          </span>
+                          {" judged"}
+                          {response.council_meta.providers_failed.length > 0 && (
+                            <span className="text-red-500 ml-1">
+                              · {response.council_meta.providers_failed.length} failed
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                        showCouncil ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {showCouncil && (
+                    <div className="mt-3 space-y-3">
+                      {Object.entries(
+                        response.council_meta.individual_responses
+                      ).map(([provider, text]) => (
+                        <div
+                          key={provider}
+                          className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm"
+                        >
+                          <div className="flex items-center gap-2 mb-3">
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                provider === response.council_meta?.judge
+                                  ? "bg-purple-100 text-purple-700 border border-purple-200"
+                                  : response.council_meta?.providers_failed.includes(
+                                        provider
+                                      )
+                                    ? "bg-red-100 text-red-700 border border-red-200"
+                                    : "bg-indigo-100 text-indigo-700 border border-indigo-200"
+                              }`}
+                            >
+                              {provider.toUpperCase()}
+                            </span>
+                            {provider === response.council_meta?.judge && (
+                              <span className="text-xs text-purple-500 font-medium">
+                                JUDGE
+                              </span>
+                            )}
+                            {response.council_meta?.providers_failed.includes(
+                              provider
+                            ) && (
+                              <span className="text-xs text-red-500 font-medium">
+                                FAILED
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+                            {typeof text === "string"
+                              ? text.substring(0, 2000)
+                              : JSON.stringify(text, null, 2).substring(0, 2000)}
+                            {typeof text === "string" && text.length > 2000
+                              ? "..."
+                              : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

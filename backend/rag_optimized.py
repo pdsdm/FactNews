@@ -9,12 +9,14 @@ Embedding lookup order:
 """
 import os
 import json
+import random
 import numpy as np
 from openai import OpenAI
 from typing import List, Dict, Optional
 from chunker import ArticleChunker
 from embedding_cache import EmbeddingCache
 from inference.council import ModelCouncil
+from inference.config import PROVIDERS
 from filelock import FileLock
 from dotenv import load_dotenv
 
@@ -37,11 +39,22 @@ class OptimizedChunkRAG:
         self.embeddings_file = embeddings_file
         self.embedding_cache = EmbeddingCache(lru_size=1000)
         
-        # Initialize Model Council
-        # Default to OpenAI only if others aren't provided
-        providers_env = os.getenv("COUNCIL_PROVIDERS", "openai")
-        providers = [p.strip() for p in providers_env.split(",")]
-        self.council = ModelCouncil(providers=providers, judge="openai")
+        # Auto-detect available providers from .env API keys
+        available = [name for name, cfg in PROVIDERS.items()
+                     if os.getenv(cfg["env_key"])]
+        if not available:
+            available = ["openai"]  # fallback
+        
+        # Pick a random judge from available providers
+        judge = random.choice(available)
+        council_members = [p for p in available if p != judge]
+        if not council_members:
+            council_members = available  # if only 1 provider, it's both member and judge
+        
+        self.council = ModelCouncil(providers=council_members, judge=judge)
+        self.council_judge = judge
+        self.council_members = council_members
+        print(f"🏛️  Council: members={council_members}, judge={judge}")
         
         # Chunk all articles
         print("📦 Chunking articles...")
@@ -502,7 +515,271 @@ Ensure all facts include the mandatory 'date' field from their respective chunks
             judge_system_prompt=judge_system_prompt
         )
         
-        return council_result.get("judgment", {})
+        # Merge judgment with council metadata for API transparency
+        judgment = council_result.get("judgment", {})
+        judgment["_council_meta"] = {
+            "judge": self.council_judge,
+            "providers_used": council_result.get("providers_used", []),
+            "providers_failed": council_result.get("providers_failed", []),
+            "individual_responses": council_result.get("responses", {}),
+        }
+        return judgment
+
+    async def generate_answer_async(self, query: str, chunks: List[Dict]) -> Dict:
+        """
+        Async version: Generate consensus answer from relevant chunks.
+        """
+        system_prompt = """You are a STRICT fact extractor. You can ONLY use information from the chunks provided below.
+
+ABSOLUTE CONSTRAINTS:
+1. You have EXACTLY {num_chunks} text chunks below - NO OTHER INFORMATION EXISTS
+2. ONLY extract facts that are EXPLICITLY AND LITERALLY stated in these chunks
+3. NEVER add context, background, or general knowledge
+4. NEVER infer or assume anything beyond the exact text
+5. If the chunks don't mention something, IT DOES NOT EXIST for you
+6. Every single fact MUST include a VERBATIM quote as evidence
+
+CONSENSUS RULES:
+- A fact has "consensus": true ONLY if 2 or more DIFFERENT chunks/sources state the same fact
+- A fact has "consensus": false if only 1 chunk/source mentions it
+- consensus_score = (number of consensus:true facts) / (total number of facts)
+  Example: 3 consensus facts out of 5 total facts = 0.6 consensus_score
+
+RESPONSE FORMAT (JSON):
+{{
+  "headline": "Natural news headline summarizing the main story (or 'No Relevant Information Found' if off-topic)",
+  "summary": "Clear 2-3 sentence summary of the main facts and developments. Write as a news summary, not meta-commentary about sources.",
+  "facts": [
+    {{
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "date": "YYYY-MM-DD - MANDATORY: Copy from 'DATE:' line in chunk header",
+      "evidence": "EXACT quote from chunk - copy/paste verbatim",
+      "confidence": "high only if multiple chunks say exact same thing",
+      "consensus": true/false  // true ONLY if 2+ chunks explicitly state this
+    }}
+  ],
+  "divergences": [  // Only if chunks contradict each other
+    {{
+      "topic": "What they disagree on",
+      "versions": [
+        {{"source": "X", "claim": "EXACT quote from chunk", "url": "..."}}
+      ]
+    }}
+  ],
+  "bias_analysis": "Required analysis of how different sources frame the topic. Identify:
+    - Which sources use more emotional/neutral language
+    - Different emphasis or focus points
+    - Omitted details in some sources
+    - Political/ideological framing differences
+    If all sources are neutral and identical: 'All sources report factually with minimal bias'",
+  "consensus_score": 0.0-1.0,  // CALCULATION: (number of consensus facts) / (total facts). Example: 3 consensus facts out of 5 total = 0.6
+  "coverage_quality": "low/medium/high based on chunk relevance"
+}}
+
+CRITICAL EXAMPLES:
+
+HEADLINE & SUMMARY EXAMPLES:
+
+❌ WRONG - Meta-commentary:
+  Headline: "Based ONLY on chunks about Trump"
+  Summary: "The chunks provide information about tariffs"
+  → NO! Don't mention chunks or sources
+
+✅ CORRECT - Natural news style:
+  Headline: "Trump Announces 15% Global Tariffs, Criticizes Supreme Court"
+  Summary: "President Trump increased tariffs to 15% on all imports and criticized Supreme Court justices who ruled against his trade policies. Multiple sources confirm the tariff increase takes effect immediately."
+  → YES! Sounds like actual news
+
+FACT EXAMPLES:
+
+❌ WRONG - Adding context:
+  Chunk: "Trump announced new tariffs"
+  Fact: "Trump announced new tariffs following previous trade disputes"
+  → NO! "following previous trade disputes" is NOT in chunk
+
+✅ CORRECT - With DATE from chunk header:
+  CHUNK HEADER shows:
+    SOURCE 1: BBC News - Trump announces tariffs
+    DATE: 2026-02-21
+  CHUNK TEXT: "Trump announced a 10% tariff on imports"
+  
+  YOUR RESPONSE MUST BE:
+  {{
+    "claim": "Trump announced a 10% tariff on imports",
+    "date": "2026-02-21",
+    "evidence": "Trump announced a 10% tariff on imports",
+    "consensus": false  // Only 1 source mentions this
+  }}
+  → YES! Date copied from "DATE: 2026-02-21" line
+
+✅ CONSENSUS EXAMPLE:
+  SOURCE 1: BBC News says "Trump announced a 10% tariff"
+  SOURCE 2: CNN says "Trump announced a 10% tariff on imports"
+  SOURCE 3: Reuters says "The president announced 10% tariffs"
+  
+  This fact has consensus: true (3 sources confirm it)
+  
+  SOURCE 4: Bloomberg says "Supreme Court struck down the order"
+  
+  This fact has consensus: false (only 1 source mentions it)
+  
+  Result: 1 consensus fact out of 2 total = consensus_score: 0.5
+
+IF CHUNKS ARE OFF-TOPIC:
+{{
+  "headline": "No Relevant Information Found",
+  "summary": "The available sources do not contain information about this topic.",
+  "facts": [],
+  "coverage_quality": "low"
+}}
+
+Remember: You ONLY know what's in the {{num_chunks}} chunks below. Nothing else exists."""
+
+        context_parts = []
+        for i, chunk in enumerate(chunks):
+            chunk_with_context = self.chunker.get_chunk_with_context(chunk, self.chunks)
+            
+            context_parts.append(
+                f"SOURCE {i+1}: {chunk['source']} - {chunk['title']}\n"
+                f"DATE: {chunk.get('date', 'Unknown')}\n"
+                f"{'='*80}\n"
+                f"{chunk_with_context}\n"
+                f"URL: {chunk['url']}"
+            )
+        
+        context = "\n\n" + "="*80 + "\n\n".join(context_parts)
+        
+        user_prompt = f"""User question: {query}
+
+You have {len(chunks)} news chunks below with dates.
+
+CRITICAL INSTRUCTIONS:
+1. If chunks are NOT relevant: Return "No Relevant Information Found"
+2. If chunks ARE relevant:
+   - Write a NATURAL NEWS HEADLINE (not "Based on chunks...")
+   - Write a CLEAR SUMMARY as if reporting news (not "The chunks say...")
+   - For EACH fact, you MUST include the "date" field with the date shown in the chunk header (in YYYY-MM-DD format)
+   - For EACH fact, set "consensus" to true if 2+ different sources/chunks mention it, false if only 1 source
+   - Calculate consensus_score as: (number of consensus:true facts) / (total facts)
+   - Extract facts with dates from the chunks
+   - Include exact quotes as evidence
+
+MANDATORY DATE REQUIREMENT:
+Each chunk header shows:
+  SOURCE X: [name] - [title]
+  DATE: 2026-02-21    <--- COPY THIS DATE
+
+When you create a fact from that chunk, your JSON MUST include:
+{{
+  "claim": "...",
+  "date": "2026-02-21",    <--- EXACT COPY from chunk's DATE line
+  "evidence": "..."
+}}
+
+EXAMPLE - If chunk header shows "DATE: 2025-01-15", your fact JSON MUST have "date": "2025-01-15"
+
+Reference chunks:
+{context}
+
+Generate a natural news-style response based ONLY on what's in the chunks above. DO NOT FORGET THE DATE FIELD FOR EACH FACT!"""
+
+        judge_system_prompt = """You are an impartial judge evaluating JSON responses from multiple AI models extracting facts from news chunks.
+Your task is to synthesize the BEST possible final JSON response by combining the strongest, most accurate facts that models agree on, and correctly formatting it.
+        
+You MUST respond with a raw JSON object matching this EXACT schema:
+{
+  "headline": "Natural news headline summarizing the main story (or 'No Relevant Information Found' if off-topic)",
+  "summary": "Clear 2-3 sentence summary of the main facts and developments.",
+  "facts": [
+    {
+      "claim": "Fact EXACTLY as stated in chunk",
+      "sources": ["URL from chunk"],
+      "source_names": ["Source name from chunk header"],
+      "date": "YYYY-MM-DD",
+      "evidence": "EXACT quote from chunk - copy/paste verbatim",
+      "confidence": "high/medium/low",
+      "consensus": true/false
+    }
+  ],
+  "divergences": [
+    {
+      "topic": "What they disagree on",
+      "versions": [
+        {"source": "X", "claim": "EXACT quote from chunk", "url": "..."}
+      ]
+    }
+  ],
+  "bias_analysis": "Required analysis of how different sources frame the topic.",
+  "consensus_score": 0.0-1.0,
+  "coverage_quality": "low/medium/high based on chunk relevance"
+}
+
+Ensure all facts include the mandatory 'date' field from their respective chunks."""
+
+        council_result = await self.council.deliberate_async(
+            prompt=user_prompt,
+            system=system_prompt,
+            temperature=0.3,
+            judge_temperature=0.2,
+            judge_system_prompt=judge_system_prompt
+        )
+        
+        # --- DEBUG: Council deliberation details ---
+        providers_used = council_result.get("providers_used", [])
+        providers_failed = council_result.get("providers_failed", [])
+        responses = council_result.get("responses", {})
+        judgment = council_result.get("judgment", {})
+        raw_judgment = council_result.get("raw_judgment", "")
+        
+        print(f"\n{'='*60}")
+        print(f"🏛️  COUNCIL DEBUG - Judge: {self.council_judge}")
+        print(f"{'='*60}")
+        print(f"✅ Providers succeeded: {providers_used}")
+        print(f"❌ Providers failed: {providers_failed}")
+        
+        for name in providers_used:
+            resp_text = responses.get(name, "")
+            print(f"\n--- {name.upper()} response ({len(resp_text)} chars) ---")
+            print(resp_text[:500])
+            if len(resp_text) > 500:
+                print(f"  ... [{len(resp_text) - 500} more chars]")
+        
+        print(f"\n--- JUDGE ({self.council_judge.upper()}) raw judgment ({len(raw_judgment)} chars) ---")
+        print(raw_judgment[:800])
+        if len(raw_judgment) > 800:
+            print(f"  ... [{len(raw_judgment) - 800} more chars]")
+        
+        print(f"\n--- PARSED JUDGMENT ---")
+        print(f"  parse_error: {judgment.get('parse_error', False)}")
+        print(f"  keys: {list(judgment.keys())}")
+        print(f"  headline: {judgment.get('headline', 'MISSING')[:100]}")
+        print(f"  facts count: {len(judgment.get('facts', []))}")
+        print(f"  consensus_score: {judgment.get('consensus_score', 'MISSING')}")
+        print(f"  coverage_quality: {judgment.get('coverage_quality', 'MISSING')}")
+        print(f"  divergences count: {len(judgment.get('divergences', []))}")
+        print(f"  bias_analysis: {str(judgment.get('bias_analysis', 'MISSING'))[:200]}")
+        
+        if judgment.get("facts"):
+            for i, fact in enumerate(judgment["facts"][:3]):
+                print(f"  fact[{i}]: claim={str(fact.get('claim',''))[:80]}, "
+                      f"confidence={fact.get('confidence','?')}, "
+                      f"consensus={fact.get('consensus','?')}, "
+                      f"date={fact.get('date','MISSING')}, "
+                      f"sources={fact.get('source_names', fact.get('sources', []))}")
+            if len(judgment["facts"]) > 3:
+                print(f"  ... and {len(judgment['facts']) - 3} more facts")
+        print(f"{'='*60}\n")
+        # --- END DEBUG ---
+        
+        judgment["_council_meta"] = {
+            "judge": self.council_judge,
+            "providers_used": providers_used,
+            "providers_failed": providers_failed,
+            "individual_responses": responses,
+        }
+        return judgment
     
     def search_relevant_chunks(self, question: str, top_k: int = 20) -> Dict:
         """

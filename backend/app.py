@@ -158,6 +158,7 @@ class ConsensusResponse(BaseModel):
     chunks_used: int | None = None
     sources_analyzed: int | None = None
     cached: bool = False
+    council_meta: dict | None = None
 
 
 @app.get("/")
@@ -408,6 +409,9 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             else headline or summary or "No answer generated."
         )
         
+        # Extract council metadata before building response
+        council_meta = llm_response.pop("_council_meta", None)
+        
         response = ConsensusResponse(
             headline=headline,
             summary=summary,
@@ -420,6 +424,7 @@ def ask_question(http_request: Request, request: QuestionRequest) -> ConsensusRe
             chunks_used=len(diverse_chunks),
             sources_analyzed=unique_sources,
             cached=False,
+            council_meta=council_meta,
         )
         
         response_cache.set(request.question, response.model_dump())
@@ -468,11 +473,41 @@ async def ask_question_stream(http_request: Request, request: QuestionRequest):
             
             yield f"data: {json.dumps({'status': 'generating', 'message': 'Generating consensus...'})}\n\n"
             
-            llm_response = await asyncio.to_thread(
-                _chunk_rag.generate_answer, request.question, diverse_chunks
-            )
+            llm_response = await _chunk_rag.generate_answer_async(request.question, diverse_chunks)
             
-            yield f"data: {json.dumps({'status': 'complete', 'response': llm_response})}\n\n"
+            council_meta = llm_response.pop("_council_meta", None)
+            logger.info(f"📊 LLM response keys: {list(llm_response.keys())}")
+            logger.info(f"📰 Headline: {llm_response.get('headline', 'N/A')[:100]}...")
+            logger.info(f"📋 Facts: {len(llm_response.get('facts', []))} extracted")
+            
+            # Re-attach council_meta so the frontend can display the Council Deliberation panel
+            if council_meta:
+                llm_response["council_meta"] = council_meta
+                logger.info(f"🏛️ Council meta: judge={council_meta.get('judge')}, "
+                           f"providers={council_meta.get('providers_used')}, "
+                           f"failed={council_meta.get('providers_failed')}")
+            
+            try:
+                response_json = json.dumps({'status': 'complete', 'response': llm_response})
+                logger.info(f"📤 Sending response ({len(response_json)} bytes)")
+                # --- DEBUG: What is actually being sent to the frontend ---
+                print(f"\n{'='*60}")
+                print(f"📤 STREAMING RESPONSE DEBUG")
+                print(f"{'='*60}")
+                print(f"  Response keys: {list(llm_response.keys())}")
+                print(f"  Has council_meta: {'council_meta' in llm_response}")
+                print(f"  Has headline: {'headline' in llm_response}")
+                print(f"  Has facts: {'facts' in llm_response} ({len(llm_response.get('facts', []))} items)")
+                print(f"  Has divergences: {'divergences' in llm_response} ({len(llm_response.get('divergences', []))} items)")
+                print(f"  consensus_score: {llm_response.get('consensus_score', 'MISSING')}")
+                print(f"  coverage_quality: {llm_response.get('coverage_quality', 'MISSING')}")
+                print(f"  Total bytes: {len(response_json)}")
+                print(f"{'='*60}\n")
+                # --- END DEBUG ---
+                yield f"data: {response_json}\n\n"
+            except Exception as json_err:
+                logger.error(f"JSON serialization error: {json_err}")
+                yield f"data: {json.dumps({'status': 'error', 'message': f'JSON error: {json_err}'})}\n\n"
         
         except Exception as e:
             logger.error(f"Streaming error: {e}")
