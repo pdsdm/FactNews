@@ -119,11 +119,30 @@ function ArticleCard({
   const [expanded, setExpanded] = useState(false);
   const router = useRouter();
 
+  const PREVIEW_CHARS = hero ? 600 : 280;
   const bodyParagraphs = (article.body ?? "").split("\n\n").filter(Boolean);
-  const previewParas = hero
-    ? bodyParagraphs.slice(0, 2)
-    : bodyParagraphs.slice(0, 1);
-  const hasMore = bodyParagraphs.length > previewParas.length;
+
+  let displayParas: string[];
+  let hasMore: boolean;
+
+  if (hero) {
+    hasMore = bodyParagraphs.length > 2;
+    displayParas = expanded ? bodyParagraphs : bodyParagraphs.slice(0, 2);
+  } else {
+    const firstPara = bodyParagraphs[0] ?? "";
+    const hasMultipleParas = bodyParagraphs.length > 1;
+    const isFirstParaLong = firstPara.length > PREVIEW_CHARS;
+    hasMore = hasMultipleParas || isFirstParaLong;
+    if (expanded) {
+      displayParas = bodyParagraphs;
+    } else if (hasMultipleParas) {
+      displayParas = [firstPara];
+    } else if (isFirstParaLong) {
+      displayParas = [firstPara.slice(0, PREVIEW_CHARS) + "…"];
+    } else {
+      displayParas = bodyParagraphs;
+    }
+  }
 
   return (
     <article
@@ -167,7 +186,7 @@ function ArticleCard({
           hero ? "" : ""
         }`}
       >
-        {(expanded ? bodyParagraphs : previewParas).map((p, i) => (
+        {displayParas.map((p, i) => (
           <p key={i}>{p}</p>
         ))}
       </div>
@@ -275,7 +294,10 @@ export default function FeedPage() {
 
   if (!edition) return null;
 
-  const [hero, ...rest] = edition.articles;
+  const validArticles = (edition.articles ?? []).filter(
+    (a) => a && a.headline && a.body
+  );
+  const [hero, ...rest] = validArticles;
 
   return (
     <div className="min-h-screen pb-20">
