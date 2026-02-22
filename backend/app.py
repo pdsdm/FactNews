@@ -13,7 +13,7 @@ import json
 import time
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -211,7 +211,7 @@ def health_check():
         "redis": "connected" if redis_ok else "unavailable",
         "rag": "ready" if rag_ok else "not_ready",
         "articles": len(_articles),
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -273,7 +273,7 @@ async def _run_ingestion(max_feeds: int | None, scrape_full: bool, days_back: in
         _chunk_rag = OptimizedChunkRAG(_articles)
         _chunk_rag.cleanup_old_embeddings()
         
-        _ingestion_status["last_run"] = datetime.utcnow().isoformat()
+        _ingestion_status["last_run"] = datetime.now(timezone.utc).isoformat()
         _ingestion_status["articles_added"] = stats.get("new_articles", 0)
         
         get_response_cache().clear_all()
@@ -719,7 +719,7 @@ async def _run_selected_ingestion(feeds: dict[str, str]):
 
         get_response_cache().clear_all()
 
-        _ingestion_status["last_run"] = datetime.utcnow().isoformat()
+        _ingestion_status["last_run"] = datetime.now(timezone.utc).isoformat()
         _ingestion_status["articles_added"] = count
         logger.info(f"Selected-source ingestion complete: {count} articles")
 

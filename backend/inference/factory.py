@@ -17,6 +17,7 @@ from inference.providers import (
     GrokProvider,
     CerebrasProvider,
     ZAIProvider,
+    OpenRouterProvider,
 )
 
 _REGISTRY: dict[str, type[InferenceProvider]] = {
@@ -28,6 +29,7 @@ _REGISTRY: dict[str, type[InferenceProvider]] = {
     "grok": GrokProvider,
     "cerebras": CerebrasProvider,
     "zai": ZAIProvider,
+    "openrouter": OpenRouterProvider,
 }
 
 # Cache: one instance per provider name (singleton-ish)

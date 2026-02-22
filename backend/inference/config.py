@@ -59,6 +59,12 @@ PROVIDERS: dict[str, dict] = {
         "model": "zai-default",
         "supports_embeddings": False,
     },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "env_key": "OPENROUTER_API_KEY",
+        "model": "meta-llama/llama-3.3-70b-instruct",
+        "supports_embeddings": False,
+    },
 }
 
 
