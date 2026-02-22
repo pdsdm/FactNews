@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Newspaper, RefreshCw, Search } from "lucide-react";
+import { Newspaper, RefreshCw, Search, ChevronDown } from "lucide-react";
 import { basepath } from "../env";
 
 const API = `http://${basepath}:8000`;
+const UNSPLASH_ACCESS_KEY = "WE0D0lKqJVSXlEf01tYQdXAUmXkZBewYfILxPFUAhXc"; // Free tier key
+const ARTICLES_PER_PAGE = 12;
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 interface AIArticle {
@@ -17,6 +19,7 @@ interface AIArticle {
   source_count: number;
   cluster_size: number;
   original_urls?: string[];
+  image_url?: string;
 }
 
 interface NewspaperEdition {
@@ -115,6 +118,7 @@ function ArticleCard({
   const bodyText = (article.body ?? "").trim();
   const category = (article.category ?? "Other").trim();
   const bodyParagraphs = bodyText.split("\n\n").filter(Boolean);
+  const imageUrl = article.image_url;
 
   if (!headline) return null;
 
@@ -142,87 +146,119 @@ function ArticleCard({
   return (
     <article
       className={`group h-full flex flex-col bg-white border border-slate-200 dark:bg-slate-900 dark:border-slate-800 overflow-hidden transition-all hover:shadow-md ${
-        isLarge
-          ? "rounded-2xl p-6 md:p-8"
-          : isMid
-            ? "rounded-xl p-5 md:p-6"
-            : "rounded-xl p-4"
+        isLarge ? "rounded-2xl" : isMid ? "rounded-xl" : "rounded-xl"
       }`}
     >
-      {/* Category + sources */}
-      <div className="flex items-center gap-2 mb-2">
-        {category && (
-          <span
-            className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
-          >
-            {category}
-          </span>
-        )}
-        <span className="text-[10px] text-slate-400 dark:text-slate-500">
-          {article.source_count} sources · {article.cluster_size} reports
-        </span>
-      </div>
-
-      {/* Headline */}
-      <h2
-        className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 font-times-new-roman ${headlineClass}`}
-      >
-        {headline}
-      </h2>
-
-      {/* Summary — justified */}
-      {summary && (
-        <p
-          className={`text-justify text-slate-500 dark:text-slate-400 leading-relaxed mb-3 ${
-            isLarge ? "text-base" : "text-sm"
-          } ${summaryClamp}`}
+      {/* Image */}
+      {imageUrl && (
+        <div
+          className={`relative overflow-hidden ${
+            isLarge ? "h-80" : isMid ? "h-56" : "h-40"
+          }`}
         >
-          {summary}
-        </p>
-      )}
-
-      {/* Body — justified, clamped */}
-      {bodyParagraphs.length > 0 && (
-        <div className="flex-1 overflow-hidden">
-          <div
-            className={`text-justify text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-2 ${bodyClamp}`}
-          >
-            {bodyParagraphs.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Actions row — pinned to bottom */}
-      <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
-        <div className="flex items-center gap-1 flex-wrap">
-          {(article.sources_referenced ?? [])
-            .slice(0, srcLimit)
-            .map((src, i) => (
-              <span
-                key={`${src}-${i}`}
-                className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-              >
-                {src}
-              </span>
-            ))}
-          {(article.sources_referenced ?? []).length > srcLimit && (
-            <span className="text-[10px] text-slate-400">
-              +{(article.sources_referenced ?? []).length - srcLimit}
+          <img
+            src={imageUrl}
+            alt={headline}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          {/* Category overlay */}
+          {category && (
+            <span
+              className={`absolute top-3 left-3 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
+            >
+              {category}
             </span>
           )}
         </div>
+      )}
 
-        <button
-          onClick={() =>
-            router.push(`/search?q=${encodeURIComponent(headline)}`)
-          }
-          className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+      {/* Content */}
+      <div className={isLarge ? "p-6 md:p-8" : isMid ? "p-5 md:p-6" : "p-4"}>
+        {/* Category + sources (only if no image) */}
+        {!imageUrl && (
+          <div className="flex items-center gap-2 mb-2">
+            {category && (
+              <span
+                className={`px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded ${catClass(category)}`}
+              >
+                {category}
+              </span>
+            )}
+            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+              {article.source_count} sources · {article.cluster_size} reports
+            </span>
+          </div>
+        )}
+        {imageUrl && (
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500">
+              {article.source_count} sources · {article.cluster_size} reports
+            </span>
+          </div>
+        )}
+
+        {/* Headline */}
+        <h2
+          className={`font-bold text-slate-900 dark:text-slate-100 leading-snug mb-2 font-times-new-roman ${headlineClass}`}
         >
-          <Search className="w-3 h-3" />
-          Fact-check
-        </button>
+          {headline}
+        </h2>
+
+        {/* Summary — justified */}
+        {summary && (
+          <p
+            className={`text-justify text-slate-500 dark:text-slate-400 leading-relaxed mb-3 ${
+              isLarge ? "text-base" : "text-sm"
+            } ${summaryClamp}`}
+          >
+            {summary}
+          </p>
+        )}
+
+        {/* Body — justified, clamped */}
+        {bodyParagraphs.length > 0 && (
+          <div className="flex-1 overflow-hidden">
+            <div
+              className={`text-justify text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-2 ${bodyClamp}`}
+            >
+              {bodyParagraphs.map((p, i) => (
+                <p key={i}>{p}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions row — pinned to bottom */}
+        <div className="flex items-center justify-between mt-auto pt-3 border-t border-slate-100 dark:border-slate-800">
+          <div className="flex items-center gap-1 flex-wrap">
+            {(article.sources_referenced ?? [])
+              .slice(0, srcLimit)
+              .map((src, i) => (
+                <span
+                  key={`${src}-${i}`}
+                  className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                >
+                  {src}
+                </span>
+              ))}
+            {(article.sources_referenced ?? []).length > srcLimit && (
+              <span className="text-[10px] text-slate-400">
+                +{(article.sources_referenced ?? []).length - srcLimit}
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={() =>
+              router.push(`/search?q=${encodeURIComponent(headline)}`)
+            }
+            className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+          >
+            <Search className="w-3 h-3" />
+            Fact-check
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -233,24 +269,95 @@ export default function FeedPage() {
   const [edition, setEdition] = useState<NewspaperEdition | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const fetchEdition = useCallback(async (force = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = `${API}/api/newspaper${force ? "?force=true" : ""}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${res.status}`);
+  const [visibleCount, setVisibleCount] = useState(ARTICLES_PER_PAGE);
+  const [, forceUpdate] = useState({});
+  const imageCacheRef = useRef<Record<string, string>>({});
+  const imageLoadingRef = useRef<Set<string>>(new Set());
+
+  // Fetch image from Unsplash based on article category/headline
+  const fetchImage = useCallback(
+    async (article: AIArticle): Promise<string | undefined> => {
+      const cacheKey = article.headline;
+
+      // Check cache first
+      if (imageCacheRef.current[cacheKey]) {
+        return imageCacheRef.current[cacheKey];
       }
-      const data: NewspaperEdition = await res.json();
-      setEdition(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load edition");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+
+      // Prevent duplicate requests
+      if (imageLoadingRef.current.has(cacheKey)) return undefined;
+
+      imageLoadingRef.current.add(cacheKey);
+
+      try {
+        const query = article.category || "news";
+        console.log(`Fetching image for category: ${query}`);
+        const response = await fetch(
+          `https://api.unsplash.com/photos/random?query=${encodeURIComponent(query)}&orientation=landscape`,
+          { headers: { Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}` } },
+        );
+
+        console.log(`Unsplash response status: ${response.status}`);
+
+        if (response.ok) {
+          const data = await response.json();
+          const imageUrl = data.urls.regular;
+
+          console.log(
+            `Image fetched successfully: ${imageUrl.substring(0, 50)}...`,
+          );
+
+          // Cache in memory
+          imageCacheRef.current[cacheKey] = imageUrl;
+          return imageUrl;
+        } else {
+          const errorText = await response.text();
+          console.warn(`Unsplash API error: ${response.status}`, errorText);
+        }
+      } catch (err) {
+        console.error("Failed to fetch image:", err);
+      } finally {
+        imageLoadingRef.current.delete(cacheKey);
+      }
+
+      return undefined;
+    },
+    [],
+  );
+
+  const fetchEdition = useCallback(
+    async (force = false) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `${API}/api/newspaper${force ? "?force=true" : ""}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || `Error ${res.status}`);
+        }
+        const data: NewspaperEdition = await res.json();
+
+        // Fetch images for articles in background
+        const articlesWithImages = await Promise.all(
+          data.articles.map(async (article) => {
+            const imageUrl = await fetchImage(article);
+            console.log(`Article "${article.headline.substring(0, 30)}..." has image: ${imageUrl ? 'YES' : 'NO'}`);
+            return { ...article, image_url: imageUrl };
+          }),
+        );
+        
+        console.log(`Total articles: ${articlesWithImages.length}, With images: ${articlesWithImages.filter(a => a.image_url).length}`);
+
+        setEdition({ ...data, articles: articlesWithImages });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load edition");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [fetchImage],
+  );
 
   useEffect(() => {
     fetchEdition();
@@ -295,7 +402,13 @@ export default function FeedPage() {
   const hero = sorted[0] ?? null;
   const second = sorted[1] ?? null;
   const secondRight = sorted.slice(2, 4);
-  const grid = sorted.slice(4);
+  const allRemaining = sorted.slice(4);
+  const visibleArticles = allRemaining.slice(0, visibleCount - 4);
+  const hasMore = allRemaining.length > visibleArticles.length;
+
+  const handleShowMore = () => {
+    setVisibleCount((prev) => prev + ARTICLES_PER_PAGE);
+  };
 
   return (
     <div className="min-h-screen pb-20">
@@ -335,12 +448,27 @@ export default function FeedPage() {
           )}
 
           {/* Stories 3+ — 1 col × 1 row each */}
-          {[...secondRight, ...grid].map((article, i) => (
+          {[...secondRight, ...visibleArticles].map((article, i) => (
             <div key={i} className="xl:col-span-1 xl:row-span-1">
               <ArticleCard article={article} size="small" />
             </div>
           ))}
         </div>
+
+        {/* Show More Button */}
+        {hasMore && (
+          <div className="flex justify-center mt-8">
+            <button
+              onClick={handleShowMore}
+              className="flex items-center gap-2 px-6 py-3 text-sm font-medium bg-slate-900 text-white rounded-lg hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 transition-colors"
+            >
+              <ChevronDown className="w-4 h-4" />
+              Show More Articles ({allRemaining.length -
+                visibleArticles.length}{" "}
+              remaining)
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

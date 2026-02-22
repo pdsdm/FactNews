@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { basepath } from "../env";
 import {
   fetchSourcesCatalog,
   fetchSelectedSources,
@@ -42,10 +43,10 @@ export default function SourcesPage() {
       const sel = new Set(selectedData);
       setSelected(sel);
       setSavedSelection(new Set(sel));
-      
+
       // Preload newspaper/feed data in background for faster navigation
       fetch(`http://${basepath}:8000/api/newspaper`)
-        .then(res => res.json())
+        .then((res) => res.json())
         .catch(() => {}); // Silent fail, just background prefetch
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load sources");
