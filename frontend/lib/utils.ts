@@ -23,3 +23,7 @@ export function getConfidenceBadge(confidence: string): string {
       return "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700";
   }
 }
+
+export function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}

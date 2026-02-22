@@ -6,6 +6,8 @@ export const NAV_ITEMS = [
   { href: "/bookmarks", label: "Bookmarks", icon: "Bookmark" },
 ] as const;
 
+export const BOOKMARKS_MAX = 100;
+
 export const SEARCH_CATEGORIES = [
   "Politics",
   "Technology",

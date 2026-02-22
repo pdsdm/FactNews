@@ -90,3 +90,11 @@ export interface SearchPreviewResponse {
   sources_analyzed: number;
   chunks_used: number;
 }
+
+export interface Bookmark {
+  id: string;
+  query: string;
+  response: ConsensusResponse;
+  savedAt: number;
+  note?: string;
+}
