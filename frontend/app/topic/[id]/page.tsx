@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, use, Suspense } from "react";
+import { useState, use, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, RefreshCw } from "lucide-react";
@@ -13,48 +13,35 @@ interface TopicPageProps {
   params: Promise<{ id: string }>;
 }
 
+type Snapshot = { query: string; response: ConsensusResponse };
+
 function TopicContent({ params }: TopicPageProps) {
   const { id } = use(params);
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
 
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const historyEntry = useSearchHistoryStore((s) => s.getEntry(id));
   const bookmarkEntry = useBookmarkStore((s) => s.getBookmark(id));
 
-  // Snapshot the first valid data so the page stays visible if the user
-  // unsaves/removes the entry while viewing it.
-  const snapshotRef = useRef<{
-    query: string;
-    response: ConsensusResponse;
-  } | null>(null);
-
-  if (mounted && !snapshotRef.current) {
+  // Capture the first valid data so it survives if the store entry is later removed.
+  const resolved: Snapshot | null = (() => {
     if (source === "bookmarks" && bookmarkEntry) {
-      snapshotRef.current = {
-        query: bookmarkEntry.query,
-        response: bookmarkEntry.response,
-      };
-    } else if (historyEntry?.response) {
-      snapshotRef.current = {
-        query: historyEntry.query,
-        response: historyEntry.response,
-      };
-    } else if (bookmarkEntry) {
-      snapshotRef.current = {
-        query: bookmarkEntry.query,
-        response: bookmarkEntry.response,
-      };
+      return { query: bookmarkEntry.query, response: bookmarkEntry.response };
     }
-  }
+    if (historyEntry?.response) {
+      return { query: historyEntry.query, response: historyEntry.response };
+    }
+    if (bookmarkEntry) {
+      return { query: bookmarkEntry.query, response: bookmarkEntry.response };
+    }
+    return null;
+  })();
 
-  if (!mounted) return null;
+  // Once we have data, keep it in state so it survives store removals.
+  const [captured] = useState<Snapshot | null>(() => resolved);
+  const snapshot = captured ?? resolved;
 
-  const pageData = snapshotRef.current;
-
-  if (!pageData) {
+  if (!snapshot) {
     return (
       <div className="min-h-screen">
         <div className="max-w-7xl mx-auto px-6 pt-10">
@@ -78,7 +65,7 @@ function TopicContent({ params }: TopicPageProps) {
     );
   }
 
-  const { query, response } = pageData;
+  const { query, response } = snapshot;
 
   return (
     <div className="min-h-screen">

@@ -13,12 +13,8 @@ import {
   RotateCcw,
   CheckCircle2,
   AlertCircle,
-<<<<<<< Updated upstream
   Search,
   Check,
-=======
-  XCircle,
->>>>>>> Stashed changes
 } from "lucide-react";
 
 const MAX_SOURCES = 20;
@@ -126,7 +122,6 @@ export default function SourcesPage() {
     setError(null);
   };
 
-<<<<<<< Updated upstream
   /* Filter logic */
   const filteredCatalog = useMemo(() => {
     let data = catalog;
@@ -144,11 +139,6 @@ export default function SourcesPage() {
       }))
       .filter((c) => c.sources.length > 0);
   }, [catalog, filter, activeCountry]);
-=======
-  const handleClearAll = () => {
-    setSelected(new Set());
-  };
->>>>>>> Stashed changes
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-8 pb-28">
@@ -243,7 +233,6 @@ export default function SourcesPage() {
           <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
         </div>
       ) : (
-<<<<<<< Updated upstream
         <div className="space-y-10">
           {filteredCatalog.map((country) => {
             const names = country.sources.map((s) => s.name);
@@ -324,61 +313,6 @@ export default function SourcesPage() {
             </p>
           )}
         </div>
-=======
-        <>
-          <div className="space-y-10">
-            {catalog.map((country) => {
-              const names = country.sources.map((s) => s.name);
-              const allIn = names.every((n) => selected.has(n));
-
-              return (
-                <section key={country.code}>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      <span className="text-lg">{country.flag}</span>
-                      {country.name}
-                    </h2>
-                    <button
-                      type="button"
-                      onClick={() => selectAllInCountry(country)}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    >
-                      {allIn ? "Deselect all" : "Select all"}
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {country.sources.map((src) => (
-                      <SourceCard
-                        key={src.name}
-                        name={src.name}
-                        selected={selected.has(src.name)}
-                        onToggle={() => toggle(src.name)}
-                        disabled={
-                          !selected.has(src.name) && selected.size >= MAX_SOURCES
-                        }
-                      />
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
-
-          {selected.size > 0 && (
-            <div className="flex justify-center pt-6">
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/30"
-              >
-                <XCircle className="w-4 h-4" />
-                Clear all
-              </button>
-            </div>
-          )}
-        </>
->>>>>>> Stashed changes
       )}
 
       {/* Sticky save bar */}
