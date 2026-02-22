@@ -7,6 +7,7 @@ from inference.providers.anthropic import AnthropicProvider
 from inference.providers.grok import GrokProvider
 from inference.providers.cerebras import CerebrasProvider
 from inference.providers.zai import ZAIProvider
+from inference.providers.openrouter import OpenRouterProvider
 
 __all__ = [
     "OpenAIProvider",
@@ -17,4 +18,5 @@ __all__ = [
     "GrokProvider",
     "CerebrasProvider",
     "ZAIProvider",
+    "OpenRouterProvider",
 ]
